@@ -1,0 +1,58 @@
+import { HashRouter, Routes, Route } from 'react-router-dom'
+import { StoreProvider, useStore } from './store/useStore'
+import BottomNavigation from './components/BottomNavigation'
+import Sidebar from './components/Sidebar'
+import { ToastHost } from './components/Primitives'
+import Dashboard from './pages/Dashboard'
+import Expenses from './pages/Expenses'
+import Charts from './pages/Charts'
+import Investments from './pages/Investments'
+import AssetAnalysis from './pages/AssetAnalysis'
+import Portfolio from './pages/Portfolio'
+import Budget from './pages/Budget'
+import Goals from './pages/Goals'
+import Simulator from './pages/Simulator'
+import Settings from './pages/Settings'
+import More from './pages/More'
+import Onboarding from './pages/Onboarding'
+
+function AppShell() {
+  const { state } = useStore()
+
+  if (!state.settings.onboarded) {
+    return <Onboarding />
+  }
+
+  return (
+    <div className="min-h-screen bg-bg text-txt flex">
+      <Sidebar />
+      <div className="flex-1 min-w-0 md:max-w-3xl md:mx-auto">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/gastos" element={<Expenses />} />
+          <Route path="/graficos" element={<Charts />} />
+          <Route path="/investimentos" element={<Investments />} />
+          <Route path="/investimentos/:ticker" element={<AssetAnalysis />} />
+          <Route path="/carteira" element={<Portfolio />} />
+          <Route path="/metas" element={<Goals />} />
+          <Route path="/orcamento" element={<Budget />} />
+          <Route path="/simulador" element={<Simulator />} />
+          <Route path="/configuracoes" element={<Settings />} />
+          <Route path="/mais" element={<More />} />
+        </Routes>
+      </div>
+      <BottomNavigation />
+      <ToastHost />
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <StoreProvider>
+      <HashRouter>
+        <AppShell />
+      </HashRouter>
+    </StoreProvider>
+  )
+}
