@@ -4,9 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // IMPORTANT: change "base" to match your GitHub repository name
 // Example: if your repo is https://github.com/user/greenfinance
-// base should be '/greenfinance/'
+// base should be '/Vitor_finan-as/'
 export default defineConfig({
-  base: '/greenfinance/',
+  base: '/Vitor_finan-as/',
   plugins: [
     react(),
     VitePWA({
@@ -19,8 +19,8 @@ export default defineConfig({
         theme_color: '#080A09',
         background_color: '#080A09',
         display: 'standalone',
-        start_url: '/greenfinance/',
-        scope: '/greenfinance/',
+        start_url: '/Vitor_finan-as/',
+        scope: '/Vitor_finan-as/',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }
@@ -28,7 +28,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        navigateFallback: '/greenfinance/index.html'
+        navigateFallback: '/Vitor_finan-as/index.html'
       }
     })
   ],
