@@ -8,6 +8,20 @@ export function formatCompact(value: number): string {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 }
 
+/** Short, axis-friendly BRL label: R$ 1,2 mil / R$ 3,4 mi. */
+export function formatCurrencyShort(value: number): string {
+  const abs = Math.abs(value)
+  const sign = value < 0 ? '-' : ''
+  if (abs >= 1_000_000) return `${sign}R$ ${(abs / 1_000_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mi`
+  if (abs >= 1_000) return `${sign}R$ ${(abs / 1_000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} mil`
+  return `${sign}R$ ${abs.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`
+}
+
+/** Signed percentage label, e.g. +12,3% / -4,0%. */
+export function formatSignedPct(value: number, digits = 1): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(digits).replace('.', ',')}%`
+}
+
 // Simple fixed list of Brazilian national holidays (month-day). Not exhaustive,
 // but covers fixed-date holidays which is enough for the "adjust payday" feature.
 const FIXED_HOLIDAYS = new Set([

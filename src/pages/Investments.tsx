@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import { Card, EmptyState, Skeleton } from '../components/Primitives'
 import { useStore } from '../store/useStore'
-import { formatCurrency } from '../utils/finance'
-import { Search, TrendingUp, TrendingDown } from 'lucide-react'
-import { getQuote, QuoteResult } from '../services/marketApi'
+import { formatCurrency, formatSignedPct } from '../utils/finance'
+import { Search, TrendingUp, TrendingDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { getQuote, getQuotesBatch, QuoteResult } from '../services/marketApi'
+import { WATCHLIST } from '../data/investing'
 
 const SUGGESTIONS = ['PETR4', 'VALE3', 'ITUB4', 'BOVA11', 'MXRF11', 'WEGE3']
 
@@ -67,6 +68,8 @@ export default function Investments() {
           )}
         </Card>
 
+        <RecommendedAssets onOpen={t => navigate(`/investimentos/${t}`)} />
+
         <Card>
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-medium">Minha carteira</p>
@@ -104,6 +107,98 @@ export default function Investments() {
         </p>
       </div>
     </div>
+  )
+}
+
+function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
+  const [quotes, setQuotes] = useState<Record<string, QuoteResult>>({})
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+
+  async function load() {
+    setStatus('loading')
+    const results = await getQuotesBatch(WATCHLIST.map(w => w.ticker))
+    if (results.length === 0) {
+      setStatus('error')
+      return
+    }
+    const map: Record<string, QuoteResult> = {}
+    for (const r of results) map[r.ticker] = r
+    setQuotes(map)
+    setStatus('ready')
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Order the curated list by today's performance (biggest movers first).
+  const ordered = [...WATCHLIST].sort((a, b) => {
+    const ca = quotes[a.ticker]?.changePercent ?? -Infinity
+    const cb = quotes[b.ticker]?.changePercent ?? -Infinity
+    return cb - ca
+  })
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-sm font-medium">Destaques do mercado</p>
+        <button
+          onClick={load}
+          aria-label="Atualizar cotações"
+          className="text-muted hover:text-green"
+        >
+          <RefreshCw size={14} className={status === 'loading' ? 'animate-spin' : ''} />
+        </button>
+      </div>
+      <p className="text-xs text-muted mb-3">Ativos populares para começar, ordenados pela variação do dia.</p>
+
+      {status === 'error' && (
+        <p className="text-xs text-muted">Não foi possível carregar as cotações agora. Tente novamente mais tarde.</p>
+      )}
+
+      {status === 'loading' && (
+        <div className="space-y-2">
+          {WATCHLIST.slice(0, 4).map(w => (
+            <Skeleton key={w.ticker} className="h-14 w-full" />
+          ))}
+        </div>
+      )}
+
+      {status === 'ready' && (
+        <div className="space-y-1.5">
+          {ordered.map(item => {
+            const q = quotes[item.ticker]
+            const positive = (q?.changePercent ?? 0) >= 0
+            return (
+              <button
+                key={item.ticker}
+                onClick={() => onOpen(item.ticker)}
+                className="w-full flex items-center gap-3 rounded-xl bg-bg border border-white/5 p-3 text-left hover:border-white/15 transition-colors"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold">{item.ticker}</p>
+                    <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] text-muted">{item.kind}</span>
+                  </div>
+                  <p className="text-[11px] text-muted truncate">{item.note}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-medium">{q ? formatCurrency(q.price) : '—'}</p>
+                  {q && (
+                    <span className={`flex items-center justify-end gap-0.5 text-xs font-semibold ${positive ? 'text-green' : 'text-danger'}`}>
+                      {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                      {formatSignedPct(q.changePercent)}
+                    </span>
+                  )}
+                </div>
+                <ChevronRight size={16} className="text-muted shrink-0" />
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </Card>
   )
 }
 

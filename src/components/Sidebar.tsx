@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Receipt, PieChart, TrendingUp, Settings, Target, Wallet, Calculator } from 'lucide-react'
+import { Home, Receipt, PieChart, TrendingUp, Settings, Target, Wallet, Calculator, Landmark } from 'lucide-react'
 
 const items = [
   { to: '/', label: 'Início', icon: Home, end: true },
@@ -9,6 +9,7 @@ const items = [
   { to: '/metas', label: 'Metas', icon: Target },
   { to: '/orcamento', label: 'Orçamento', icon: Wallet },
   { to: '/simulador', label: 'Simulador', icon: Calculator },
+  { to: '/conectar', label: 'Conectar banco', icon: Landmark },
   { to: '/configuracoes', label: 'Configurações', icon: Settings }
 ]
 

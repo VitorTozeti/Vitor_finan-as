@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { AppState, Transaction, Category, Budget, Goal, PortfolioAsset, UserSettings } from '../types'
 import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS, buildDemoTransactions } from '../data/defaults'
 
@@ -25,6 +25,7 @@ function loadState(): AppState {
 interface StoreValue {
   state: AppState
   addTransaction: (t: Omit<Transaction, 'id' | 'createdAt'>) => void
+  addTransactionsBulk: (items: Omit<Transaction, 'id' | 'createdAt'>[]) => number
   updateTransaction: (id: string, patch: Partial<Transaction>) => void
   deleteTransaction: (id: string) => void
   addCategory: (name: string, icon: string) => void
@@ -45,8 +46,10 @@ const StoreContext = createContext<StoreValue | null>(null)
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AppState>(loadState)
+  const stateRef = useRef(state)
 
   useEffect(() => {
+    stateRef.current = state
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   }, [state])
 
@@ -58,6 +61,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         { ...t, id: crypto.randomUUID(), createdAt: new Date().toISOString() }
       ]
     }))
+  }, [])
+
+  const addTransactionsBulk = useCallback((items: Omit<Transaction, 'id' | 'createdAt'>[]) => {
+    // Compute the deduped set synchronously against the latest state (via ref)
+    // so we can return an accurate "added" count to the caller.
+    const current = stateRef.current
+    const seen = new Set(current.transactions.map(t => `${t.date}|${t.amount}|${t.type}|${t.description}`))
+    const now = new Date().toISOString()
+    const fresh: Transaction[] = []
+    for (const item of items) {
+      const key = `${item.date}|${item.amount}|${item.type}|${item.description}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      fresh.push({ ...item, id: crypto.randomUUID(), createdAt: now })
+    }
+    if (fresh.length > 0) {
+      setState(s => ({ ...s, transactions: [...s.transactions, ...fresh] }))
+    }
+    return fresh.length
   }, [])
 
   const updateTransaction = useCallback((id: string, patch: Partial<Transaction>) => {
@@ -144,6 +166,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const value: StoreValue = {
     state,
     addTransaction,
+    addTransactionsBulk,
     updateTransaction,
     deleteTransaction,
     addCategory,

@@ -72,6 +72,37 @@ export async function getMultipleQuotes(tickers: string[]): Promise<QuoteResult[
   return results.filter((r): r is QuoteResult => r !== null)
 }
 
+// Fetches many tickers in a single request (brapi accepts a comma-separated
+// list). Lighter on the public rate limit than one call per ticker. History is
+// omitted here to keep the payload small — use getQuote for a single asset's
+// detail view. Falls back to per-ticker fetches if the batch endpoint fails.
+export async function getQuotesBatch(tickers: string[]): Promise<QuoteResult[]> {
+  if (tickers.length === 0) return []
+  try {
+    const list = tickers.map(t => encodeURIComponent(t.toUpperCase())).join(',')
+    const res = await fetch(withToken(`${BASE_URL}/quote/${list}`))
+    if (!res.ok) return getMultipleQuotes(tickers)
+    const data = await res.json()
+    const results = Array.isArray(data?.results) ? data.results : []
+    const mapped: QuoteResult[] = results
+      .filter((r: { regularMarketPrice?: number }) => typeof r?.regularMarketPrice === 'number')
+      .map((r: Record<string, unknown>) => ({
+        ticker: r.symbol as string,
+        name: (r.longName as string) || (r.shortName as string),
+        price: r.regularMarketPrice as number,
+        change: (r.regularMarketChange as number) ?? 0,
+        changePercent: (r.regularMarketChangePercent as number) ?? 0,
+        dayHigh: r.regularMarketDayHigh as number | undefined,
+        dayLow: r.regularMarketDayLow as number | undefined,
+        volume: r.regularMarketVolume as number | undefined,
+        currency: r.currency as string | undefined
+      }))
+    return mapped.length > 0 ? mapped : getMultipleQuotes(tickers)
+  } catch {
+    return getMultipleQuotes(tickers)
+  }
+}
+
 export function computePeriodPerformance(history: { date: string; close: number }[] | undefined, days: number): number | null {
   if (!history || history.length === 0) return null
   const last = history[history.length - 1]

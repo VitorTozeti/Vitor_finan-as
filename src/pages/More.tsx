@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import { Card } from '../components/Primitives'
-import { Target, Wallet, Calculator, Settings, Briefcase, ChevronRight } from 'lucide-react'
+import { Target, Wallet, Calculator, Settings, Briefcase, Landmark, ChevronRight } from 'lucide-react'
 
 const items = [
   { to: '/metas', label: 'Metas financeiras', icon: Target, desc: 'Acompanhe seus objetivos' },
   { to: '/orcamento', label: 'Orçamento', icon: Wallet, desc: 'Defina limites por categoria' },
   { to: '/carteira', label: 'Carteira de investimentos', icon: Briefcase, desc: 'Seus ativos e rentabilidade' },
   { to: '/simulador', label: 'Simulador', icon: Calculator, desc: 'Projete seu patrimônio' },
+  { to: '/conectar', label: 'Conectar banco', icon: Landmark, desc: 'Importe extratos OFX/CSV' },
   { to: '/configuracoes', label: 'Configurações', icon: Settings, desc: 'Renda, dados e privacidade' }
 ]
 

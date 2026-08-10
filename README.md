@@ -8,9 +8,10 @@ O GreenFinance ajuda você a:
 - Registrar gastos e entradas de dinheiro rapidamente.
 - Acompanhar quanto já gastou e quanto ainda pode gastar no mês.
 - Definir orçamentos por categoria e metas financeiras.
-- Visualizar gráficos de gastos, comparação mensal e evolução de saldo.
-- Acompanhar uma carteira de investimentos e pesquisar ativos (ações, ETFs, FIIs) via API pública.
-- Simular a evolução de investimentos ao longo do tempo.
+- Visualizar gráficos de gastos, comparação mensal e evolução de saldo, com seletor de período (mês / 3M / 6M / 12M).
+- Acompanhar uma carteira de investimentos, pesquisar ativos (ações, ETFs, FIIs) via API pública e ver **destaques do mercado** com cotações ao vivo.
+- Simular a evolução de investimentos com **perfis de risco**, ajuste por inflação (valor de hoje) e metas.
+- **Conectar o banco** importando o extrato (OFX/CSV) — os lançamentos entram direto no app, sem digitar um a um.
 
 Tudo isso funcionando como um app: instalável na tela inicial, com boa parte das funções disponíveis offline.
 
@@ -70,7 +71,35 @@ Se você quiser usar um token da brapi (para mais requisições ou dados adicion
 
 **Importante sobre segurança:** como o projeto é hospedado em GitHub Pages (hospedagem estática, sem backend), qualquer variável de ambiente do Vite é embutida no código publicado — ou seja, nunca coloque chaves realmente secretas aqui. Se no futuro você quiser usar uma API que exija uma chave privada de verdade, crie uma função serverless (Cloudflare Worker, Vercel Function, AWS Lambda, etc.) que guarde a chave no servidor e sirva como proxy entre o app e a API — o frontend nunca deve conhecer a chave.
 
-Se quiser trocar de provedor de dados no futuro, edite apenas `src/services/marketApi.ts` — o restante do app consome as funções `getQuote`, `getMultipleQuotes`, `computePeriodPerformance` e `computeVolatility`, então a troca de provedor não deve exigir mudanças em outras partes do código.
+Se quiser trocar de provedor de dados no futuro, edite apenas `src/services/marketApi.ts` — o restante do app consome as funções `getQuote`, `getMultipleQuotes`, `getQuotesBatch`, `computePeriodPerformance` e `computeVolatility`, então a troca de provedor não deve exigir mudanças em outras partes do código.
+
+## Conectar banco
+
+A tela **Conectar banco** tem duas formas de trazer seus lançamentos:
+
+### 1. Importar extrato (funciona agora, sem servidor)
+
+No app do seu banco (Nubank, Itaú, Inter, etc.), exporte o extrato como **OFX** ou **CSV** e selecione o arquivo no app. O arquivo é lido **inteiramente no navegador** — nada é enviado para servidores e você nunca digita a senha do banco. O app:
+
+- reconhece data, valor e descrição automaticamente (OFX e a maioria dos CSVs em pt-BR);
+- adivinha a categoria por palavras-chave (mercado, uber, farmácia...);
+- mostra tudo em uma tela de revisão, onde você pode alternar entrada/gasto, trocar categoria e remover linhas antes de importar;
+- ignora lançamentos duplicados (mesma data, valor, tipo e descrição).
+
+O parser fica em `src/utils/statementImport.ts`.
+
+### 2. Open Finance (sincronização automática — requer backend)
+
+A sincronização automática via agregador (Pluggy, Belvo) precisa de credenciais secretas que **não podem** ficar num app estático. O cliente já está pronto em `src/services/bankApi.ts`; para habilitar:
+
+1. Contrate um agregador de Open Finance (ex.: Pluggy ou Belvo).
+2. Suba um proxy (Cloudflare Worker / Vercel Function) que guarde o segredo e exponha `POST /connect-token` e `GET /transactions/:itemId`.
+3. Defina no build:
+   ```
+   VITE_BANK_PROXY_URL=https://seu-proxy...
+   ```
+
+Enquanto a variável não estiver definida, a aba mostra as instruções de configuração em vez de um botão quebrado.
 
 ## Armazenamento de dados
 

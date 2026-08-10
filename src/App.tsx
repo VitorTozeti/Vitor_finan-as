@@ -12,6 +12,7 @@ import Portfolio from './pages/Portfolio'
 import Budget from './pages/Budget'
 import Goals from './pages/Goals'
 import Simulator from './pages/Simulator'
+import ConnectBank from './pages/ConnectBank'
 import Settings from './pages/Settings'
 import More from './pages/More'
 import Onboarding from './pages/Onboarding'
@@ -37,6 +38,7 @@ function AppShell() {
           <Route path="/metas" element={<Goals />} />
           <Route path="/orcamento" element={<Budget />} />
           <Route path="/simulador" element={<Simulator />} />
+          <Route path="/conectar" element={<ConnectBank />} />
           <Route path="/configuracoes" element={<Settings />} />
           <Route path="/mais" element={<More />} />
         </Routes>
