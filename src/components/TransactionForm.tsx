@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Modal, pushToast } from './Primitives'
 import { useStore } from '../store/useStore'
 import { Transaction, PaymentMethod } from '../types'
+import { parseAmountInput } from '../utils/finance'
 
 const PAYMENT_METHODS: PaymentMethod[] = ['Pix', 'Débito', 'Crédito', 'Dinheiro', 'Outro']
 
@@ -46,7 +47,7 @@ export default function TransactionForm({
   }, [editing, open])
 
   function handleSave() {
-    const numeric = parseFloat(amount.replace(',', '.'))
+    const numeric = parseAmountInput(amount)
     if (!numeric || numeric <= 0) {
       pushToast('Informe um valor válido', 'error')
       return

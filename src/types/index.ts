@@ -17,6 +17,8 @@ export interface Transaction {
   paymentMethod?: PaymentMethod
   note?: string
   createdAt: string
+  fitid?: string
+  recurringRuleId?: string
 }
 
 export interface Budget {
@@ -46,6 +48,18 @@ export interface PortfolioAsset {
   avgPrice: number
 }
 
+export interface RecurringRule {
+  id: string
+  description: string
+  amount: number
+  type: 'expense' | 'income'
+  categoryId: string
+  paymentMethod?: PaymentMethod
+  dayOfMonth: number
+  active: boolean
+  lastGeneratedMonth?: string // yyyy-mm of the last month a transaction was generated for
+}
+
 export interface UserSettings {
   onboarded: boolean
   mainIncome: number
@@ -62,5 +76,7 @@ export interface AppState {
   budgets: Budget[]
   goals: Goal[]
   portfolio: PortfolioAsset[]
+  recurringRules: RecurringRule[]
   demoDataCleared: boolean
+  schemaVersion?: number
 }

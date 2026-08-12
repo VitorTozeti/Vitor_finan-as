@@ -3,6 +3,7 @@ import { StoreProvider, useStore } from './store/useStore'
 import BottomNavigation from './components/BottomNavigation'
 import Sidebar from './components/Sidebar'
 import { ToastHost } from './components/Primitives'
+import ErrorBoundary from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'
 import Expenses from './pages/Expenses'
 import Charts from './pages/Charts'
@@ -51,10 +52,12 @@ function AppShell() {
 
 export default function App() {
   return (
-    <StoreProvider>
-      <HashRouter>
-        <AppShell />
-      </HashRouter>
-    </StoreProvider>
+    <ErrorBoundary>
+      <StoreProvider>
+        <HashRouter>
+          <AppShell />
+        </HashRouter>
+      </StoreProvider>
+    </ErrorBoundary>
   )
 }

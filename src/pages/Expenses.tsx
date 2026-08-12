@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header'
 import { useStore } from '../store/useStore'
 import TransactionList from '../components/TransactionList'
@@ -7,18 +7,28 @@ import { EmptyState } from '../components/Primitives'
 import { Plus, Search } from 'lucide-react'
 import { Transaction } from '../types'
 
+const PAGE_SIZE = 50
+
 export default function Expenses() {
   const { state } = useStore()
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Transaction | null>(null)
   const [filterCat, setFilterCat] = useState<string | 'all'>('all')
   const [search, setSearch] = useState('')
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   const filtered = useMemo(() => {
     return state.transactions
       .filter(t => (filterCat === 'all' ? true : t.categoryId === filterCat))
       .filter(t => t.description.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   }, [state.transactions, filterCat, search])
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE)
+  }, [filterCat, search])
+
+  const visible = filtered.slice(0, visibleCount)
 
   return (
     <div className="pb-28">
@@ -68,14 +78,24 @@ export default function Expenses() {
             }}
           />
         ) : (
-          <TransactionList
-            transactions={filtered}
-            categories={state.categories}
-            onEdit={t => {
-              setEditing(t)
-              setFormOpen(true)
-            }}
-          />
+          <>
+            <TransactionList
+              transactions={visible}
+              categories={state.categories}
+              onEdit={t => {
+                setEditing(t)
+                setFormOpen(true)
+              }}
+            />
+            {filtered.length > visible.length && (
+              <button
+                onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
+                className="w-full rounded-xl bg-white/5 py-2.5 text-xs font-medium text-muted"
+              >
+                Carregar mais ({filtered.length - visible.length} restantes)
+              </button>
+            )}
+          </>
         )}
       </div>
 

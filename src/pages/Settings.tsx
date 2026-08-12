@@ -3,6 +3,9 @@ import Header from '../components/Header'
 import { Card, pushToast, ConfirmDialog } from '../components/Primitives'
 import { useStore } from '../store/useStore'
 import { exportAsJson, exportTransactionsAsCsv, parseImportedJson } from '../utils/exportImport'
+import { parseAmountInput } from '../utils/finance'
+import CategoryManager from '../components/CategoryManager'
+import RecurringRulesManager from '../components/RecurringRulesManager'
 import { Download, Upload, Trash2 } from 'lucide-react'
 
 export default function Settings() {
@@ -14,7 +17,7 @@ export default function Settings() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   function saveIncome() {
-    const numeric = parseFloat(income.replace(',', '.'))
+    const numeric = parseAmountInput(income)
     const day = parseInt(payDay, 10)
     if (!numeric || numeric <= 0) {
       pushToast('Informe uma renda válida', 'error')
@@ -34,11 +37,10 @@ export default function Settings() {
     const reader = new FileReader()
     reader.onload = () => {
       const parsed = parseImportedJson(String(reader.result))
-      if (parsed) {
+      if (parsed !== null) {
         importData(parsed)
-        pushToast('Dados importados com sucesso')
       } else {
-        pushToast('Arquivo inválido', 'error')
+        pushToast('Arquivo não é um JSON válido', 'error')
       }
     }
     reader.readAsText(file)
@@ -81,6 +83,10 @@ export default function Settings() {
           </div>
         </Card>
 
+        <CategoryManager />
+
+        <RecurringRulesManager />
+
         <Card>
           <p className="text-sm font-medium mb-1">Dados e privacidade</p>
           <p className="text-xs text-muted mb-4">
@@ -94,7 +100,7 @@ export default function Settings() {
               <Download size={14} /> Exportar JSON
             </button>
             <button
-              onClick={() => exportTransactionsAsCsv(state.transactions)}
+              onClick={() => exportTransactionsAsCsv(state.transactions, state.categories)}
               className="flex items-center justify-center gap-1.5 rounded-xl bg-white/5 py-2.5 text-xs font-medium"
             >
               <Download size={14} /> Exportar CSV

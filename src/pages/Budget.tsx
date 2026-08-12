@@ -2,7 +2,7 @@ import { useState } from 'react'
 import Header from '../components/Header'
 import { Card, ProgressBar, pushToast } from '../components/Primitives'
 import { useStore } from '../store/useStore'
-import { isSameMonth, formatCurrency } from '../utils/finance'
+import { isSameMonth, formatCurrency, parseAmountInput } from '../utils/finance'
 
 export default function Budget() {
   const { state, setBudget } = useStore()
@@ -29,7 +29,7 @@ export default function Budget() {
   }
 
   function save(categoryId: string) {
-    const numeric = parseFloat(value.replace(',', '.'))
+    const numeric = parseAmountInput(value)
     if (!numeric || numeric <= 0) {
       pushToast('Informe um valor válido', 'error')
       return

@@ -14,10 +14,19 @@ export default function TransactionList({
   categories: Category[]
   onEdit: (t: Transaction) => void
 }) {
-  const { deleteTransaction } = useStore()
+  const { deleteTransaction, restoreTransaction } = useStore()
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const groups = groupTransactionsByDate(transactions)
   const catMap = new Map(categories.map(c => [c.id, c]))
+
+  function handleDeleteConfirmed() {
+    const target = transactions.find(t => t.id === pendingDelete)
+    if (target) {
+      deleteTransaction(target.id)
+      pushToast('Transação excluída', 'success', { label: 'Desfazer', onClick: () => restoreTransaction(target) })
+    }
+    setPendingDelete(null)
+  }
 
   return (
     <div className="space-y-6">
@@ -30,10 +39,18 @@ export default function TransactionList({
             {group.items.map(t => {
               const cat = catMap.get(t.categoryId)
               return (
-                <button
+                <div
                   key={t.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => onEdit(t)}
-                  className="w-full flex items-center gap-3 rounded-xl bg-card border border-white/5 px-4 py-3 text-left active:scale-[0.99] transition-transform"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onEdit(t)
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 rounded-xl bg-card border border-white/5 px-4 py-3 text-left active:scale-[0.99] transition-transform cursor-pointer"
                 >
                   <div className="h-10 w-10 shrink-0 rounded-full bg-white/5 flex items-center justify-center text-lg">
                     {cat?.icon ?? '📦'}
@@ -46,9 +63,8 @@ export default function TransactionList({
                     {t.type === 'income' ? '+' : '-'}
                     {formatCurrency(t.amount)}
                   </p>
-                  <span
-                    role="button"
-                    tabIndex={0}
+                  <button
+                    type="button"
                     aria-label="Excluir"
                     onClick={e => {
                       e.stopPropagation()
@@ -57,8 +73,8 @@ export default function TransactionList({
                     className="ml-1 text-muted hover:text-danger text-xs px-1"
                   >
                     ✕
-                  </span>
-                </button>
+                  </button>
+                </div>
               )
             })}
           </div>
@@ -70,13 +86,7 @@ export default function TransactionList({
         title="Excluir transação?"
         description="Essa ação não pode ser desfeita."
         onCancel={() => setPendingDelete(null)}
-        onConfirm={() => {
-          if (pendingDelete) {
-            deleteTransaction(pendingDelete)
-            pushToast('Transação excluída')
-          }
-          setPendingDelete(null)
-        }}
+        onConfirm={handleDeleteConfirmed}
       />
     </div>
   )

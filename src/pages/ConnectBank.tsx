@@ -3,9 +3,20 @@ import Header from '../components/Header'
 import { Card, pushToast } from '../components/Primitives'
 import { useStore } from '../store/useStore'
 import { formatCurrency } from '../utils/finance'
-import { parseStatement, ParsedStatementTx } from '../utils/statementImport'
+import { parseStatement, ParsedStatementTx, DateFormatHint } from '../utils/statementImport'
+import { decodeFileText, TextEncodingChoice } from '../utils/decodeFile'
 import { isBankSyncConfigured } from '../services/bankApi'
-import { Upload, FileText, ArrowLeftRight, Trash2, Link2, ShieldCheck, TrendingUp, TrendingDown } from 'lucide-react'
+import {
+  Upload,
+  FileText,
+  ArrowLeftRight,
+  Trash2,
+  Link2,
+  ShieldCheck,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle
+} from 'lucide-react'
 
 type Tab = 'import' | 'sync'
 
@@ -15,25 +26,42 @@ export default function ConnectBank() {
   const [rows, setRows] = useState<ParsedStatementTx[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [fileName, setFileName] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [format, setFormat] = useState<'OFX' | 'CSV' | null>(null)
+  const [encoding, setEncoding] = useState<TextEncodingChoice>('auto')
+  const [dateFormat, setDateFormat] = useState<DateFormatHint>('auto')
   const fileRef = useRef<HTMLInputElement>(null)
+
+  async function runParse(file: File, enc: TextEncodingChoice, fmt: DateFormatHint) {
+    const text = await decodeFileText(file, enc)
+    const result = parseStatement(text, file.name, state.categories, { dateFormat: fmt })
+    setRows(result.transactions)
+    setWarnings(result.warnings)
+    setFormat(result.format)
+    if (result.transactions.length > 0) {
+      pushToast(`${result.transactions.length} lançamento(s) lidos do arquivo`)
+    } else {
+      pushToast('Nenhum lançamento reconhecido', 'error')
+    }
+  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     setFileName(file.name)
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = parseStatement(String(reader.result), file.name, state.categories)
-      setRows(result.transactions)
-      setWarnings(result.warnings)
-      if (result.transactions.length > 0) {
-        pushToast(`${result.transactions.length} lançamento(s) lidos do arquivo`)
-      } else {
-        pushToast('Nenhum lançamento reconhecido', 'error')
-      }
-    }
-    reader.readAsText(file, 'utf-8')
+    setSelectedFile(file)
+    runParse(file, encoding, dateFormat)
     e.target.value = ''
+  }
+
+  function handleEncodingChange(value: TextEncodingChoice) {
+    setEncoding(value)
+    if (selectedFile) runParse(selectedFile, value, dateFormat)
+  }
+
+  function handleDateFormatChange(value: DateFormatHint) {
+    setDateFormat(value)
+    if (selectedFile) runParse(selectedFile, encoding, value)
   }
 
   function invertAll() {
@@ -60,7 +88,8 @@ export default function ConnectBank() {
         amount: r.amount,
         description: r.description,
         categoryId: r.categoryId,
-        date: r.date
+        date: r.date,
+        fitid: r.fitid
       }))
     )
     const skipped = rows.length - added
@@ -72,6 +101,8 @@ export default function ConnectBank() {
     setRows([])
     setWarnings([])
     setFileName(null)
+    setSelectedFile(null)
+    setFormat(null)
   }
 
   const totals = rows.reduce(
@@ -149,6 +180,44 @@ export default function ConnectBank() {
               )}
             </Card>
 
+            {selectedFile && (
+              <Card>
+                <p className="text-sm font-medium mb-3">Se algo saiu errado</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-muted mb-1.5">
+                      Acentos estranhos? Troque a codificação do arquivo
+                    </label>
+                    <select
+                      value={encoding}
+                      onChange={e => handleEncodingChange(e.target.value as TextEncodingChoice)}
+                      className="w-full rounded-lg bg-bg border border-white/10 px-2 py-1.5 text-xs outline-none focus:border-green"
+                    >
+                      <option value="auto">Automático</option>
+                      <option value="utf-8">UTF-8</option>
+                      <option value="windows-1252">Latin-1 / Windows-1252 (bancos mais antigos)</option>
+                    </select>
+                  </div>
+                  {format === 'CSV' && (
+                    <div>
+                      <label className="block text-[11px] font-medium text-muted mb-1.5">
+                        Datas erradas? Troque o formato
+                      </label>
+                      <select
+                        value={dateFormat}
+                        onChange={e => handleDateFormatChange(e.target.value as DateFormatHint)}
+                        className="w-full rounded-lg bg-bg border border-white/10 px-2 py-1.5 text-xs outline-none focus:border-green"
+                      >
+                        <option value="auto">Automático</option>
+                        <option value="dmy">DD/MM/AAAA (Brasil)</option>
+                        <option value="mdy">MM/DD/AAAA (EUA)</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            )}
+
             {warnings.length > 0 && (
               <Card className="border-warn/30">
                 {warnings.map((w, i) => (
@@ -208,6 +277,11 @@ export default function ConnectBank() {
                           <Trash2 size={14} />
                         </button>
                       </div>
+                      {r.ambiguousAmount && (
+                        <p className="mt-2 flex items-center gap-1.5 text-[11px] text-warn">
+                          <AlertTriangle size={12} /> Valor ambíguo — confira se está correto.
+                        </p>
+                      )}
                       <select
                         value={r.categoryId}
                         onChange={e => setRowCategory(idx, e.target.value)}

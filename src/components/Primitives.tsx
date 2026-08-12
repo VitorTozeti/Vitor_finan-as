@@ -145,17 +145,23 @@ export function ConfirmDialog({
   )
 }
 
+export interface ToastAction {
+  label: string
+  onClick: () => void
+}
+
 interface ToastMessage {
   id: number
   text: string
   tone: 'success' | 'error'
+  action?: ToastAction
 }
 
 let toastId = 0
 const toastListeners = new Set<(t: ToastMessage) => void>()
 
-export function pushToast(text: string, tone: 'success' | 'error' = 'success') {
-  const msg = { id: ++toastId, text, tone }
+export function pushToast(text: string, tone: 'success' | 'error' = 'success', action?: ToastAction) {
+  const msg = { id: ++toastId, text, tone, action }
   toastListeners.forEach(fn => fn(msg))
 }
 
@@ -165,9 +171,12 @@ export function ToastHost() {
   useEffect(() => {
     const listener = (t: ToastMessage) => {
       setToasts(prev => [...prev, t])
-      setTimeout(() => {
-        setToasts(prev => prev.filter(x => x.id !== t.id))
-      }, 2600)
+      setTimeout(
+        () => {
+          setToasts(prev => prev.filter(x => x.id !== t.id))
+        },
+        t.action ? 5000 : 2600
+      )
     }
     toastListeners.add(listener)
     return () => {
@@ -180,11 +189,22 @@ export function ToastHost() {
       {toasts.map(t => (
         <div
           key={t.id}
-          className={`px-4 py-2.5 rounded-xl text-sm font-medium shadow-soft animate-slideUp ${
+          className={`flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium shadow-soft animate-slideUp ${
             t.tone === 'success' ? 'bg-green text-bg' : 'bg-danger text-white'
           }`}
         >
-          {t.text}
+          <span>{t.text}</span>
+          {t.action && (
+            <button
+              onClick={() => {
+                t.action?.onClick()
+                setToasts(prev => prev.filter(x => x.id !== t.id))
+              }}
+              className="underline underline-offset-2 font-semibold shrink-0"
+            >
+              {t.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

@@ -1,0 +1,142 @@
+import { AppState, Budget, Category, Goal, PortfolioAsset, RecurringRule, Transaction, UserSettings } from '../types'
+import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from '../data/defaults'
+
+// Validates and migrates an unknown blob (from localStorage or an imported
+// backup file) into a well-formed AppState. Invalid rows inside otherwise
+// valid arrays are dropped individually (with a warning) instead of failing
+// the whole load — a single bad transaction shouldn't nuke the user's entire
+// history. Missing arrays introduced by newer schema versions (e.g.
+// recurringRules) default to empty so old backups keep working.
+
+export const CURRENT_SCHEMA_VERSION = 2
+
+export interface ValidationSuccess {
+  ok: true
+  state: AppState
+  warnings: string[]
+}
+
+export interface ValidationFailure {
+  ok: false
+  error: string
+}
+
+export type ValidateResult = ValidationSuccess | ValidationFailure
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+function sanitizeSettings(raw: unknown, warnings: string[]): UserSettings {
+  if (!isObject(raw)) {
+    warnings.push('Configurações ausentes ou inválidas — usando padrão.')
+    return { ...DEFAULT_SETTINGS }
+  }
+  return {
+    onboarded: typeof raw.onboarded === 'boolean' ? raw.onboarded : DEFAULT_SETTINGS.onboarded,
+    mainIncome:
+      typeof raw.mainIncome === 'number' && isFinite(raw.mainIncome) ? raw.mainIncome : DEFAULT_SETTINGS.mainIncome,
+    payDay:
+      typeof raw.payDay === 'number' && raw.payDay >= 1 && raw.payDay <= 31 ? raw.payDay : DEFAULT_SETTINGS.payDay,
+    otherIncomeSources: Array.isArray(raw.otherIncomeSources) ? (raw.otherIncomeSources as UserSettings['otherIncomeSources']) : [],
+    monthlyBudgetTotal: typeof raw.monthlyBudgetTotal === 'number' ? raw.monthlyBudgetTotal : undefined,
+    mainGoalDescription: typeof raw.mainGoalDescription === 'string' ? raw.mainGoalDescription : undefined
+  }
+}
+
+function sanitizeArray<T>(raw: unknown, isValid: (item: unknown) => item is T, label: string, warnings: string[]): T[] {
+  if (!Array.isArray(raw)) return []
+  const out: T[] = []
+  let dropped = 0
+  for (const item of raw) {
+    if (isValid(item)) out.push(item)
+    else dropped++
+  }
+  if (dropped > 0) warnings.push(`${dropped} registro(s) de ${label} inválido(s) foram ignorados.`)
+  return out
+}
+
+function isTransaction(v: unknown): v is Transaction {
+  if (!isObject(v)) return false
+  return (
+    typeof v.id === 'string' &&
+    (v.type === 'expense' || v.type === 'income') &&
+    typeof v.amount === 'number' &&
+    isFinite(v.amount as number) &&
+    typeof v.description === 'string' &&
+    typeof v.categoryId === 'string' &&
+    typeof v.date === 'string' &&
+    typeof v.createdAt === 'string'
+  )
+}
+
+function isCategory(v: unknown): v is Category {
+  if (!isObject(v)) return false
+  return typeof v.id === 'string' && typeof v.name === 'string' && typeof v.icon === 'string'
+}
+
+function isBudget(v: unknown): v is Budget {
+  if (!isObject(v)) return false
+  return typeof v.categoryId === 'string' && typeof v.limit === 'number'
+}
+
+function isGoal(v: unknown): v is Goal {
+  if (!isObject(v)) return false
+  return typeof v.id === 'string' && typeof v.name === 'string' && typeof v.target === 'number' && typeof v.saved === 'number'
+}
+
+function isPortfolioAsset(v: unknown): v is PortfolioAsset {
+  if (!isObject(v)) return false
+  return typeof v.id === 'string' && typeof v.ticker === 'string' && typeof v.quantity === 'number' && typeof v.avgPrice === 'number'
+}
+
+function isRecurringRule(v: unknown): v is RecurringRule {
+  if (!isObject(v)) return false
+  return (
+    typeof v.id === 'string' &&
+    typeof v.description === 'string' &&
+    typeof v.amount === 'number' &&
+    (v.type === 'expense' || v.type === 'income') &&
+    typeof v.categoryId === 'string' &&
+    typeof v.dayOfMonth === 'number' &&
+    typeof v.active === 'boolean'
+  )
+}
+
+/** Validates an unknown blob and migrates it into the current AppState shape.
+ * Requires at minimum a `transactions` array to be considered a plausible
+ * GreenFinance backup — everything else is sanitized/defaulted rather than
+ * rejected, so partial or older-schema data still loads. */
+export function validateAndMigrate(raw: unknown): ValidateResult {
+  if (!isObject(raw)) {
+    return { ok: false, error: 'O arquivo não parece ser um backup válido do GreenFinance.' }
+  }
+  if (!Array.isArray(raw.transactions)) {
+    return { ok: false, error: 'O arquivo não contém uma lista de transações válida.' }
+  }
+
+  const warnings: string[] = []
+  const settings = sanitizeSettings(raw.settings, warnings)
+  const transactions = sanitizeArray(raw.transactions, isTransaction, 'transações', warnings)
+  const categoriesRaw = sanitizeArray(raw.categories, isCategory, 'categorias', warnings)
+  const categories = categoriesRaw.length > 0 ? categoriesRaw : DEFAULT_CATEGORIES
+  const budgets = sanitizeArray(raw.budgets, isBudget, 'orçamentos', warnings)
+  const goals = sanitizeArray(raw.goals, isGoal, 'metas', warnings)
+  const portfolio = sanitizeArray(raw.portfolio, isPortfolioAsset, 'ativos', warnings)
+  const recurringRules = sanitizeArray(raw.recurringRules, isRecurringRule, 'recorrências', warnings)
+  const demoDataCleared = typeof raw.demoDataCleared === 'boolean' ? raw.demoDataCleared : false
+
+  const state: AppState = {
+    settings,
+    transactions,
+    categories,
+    budgets,
+    goals,
+    portfolio,
+    recurringRules,
+    demoDataCleared,
+    schemaVersion: CURRENT_SCHEMA_VERSION
+  }
+
+  return { ok: true, state, warnings }
+}

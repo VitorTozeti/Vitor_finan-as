@@ -1,18 +1,19 @@
-import { AppState, Transaction } from '../types'
+import { AppState, Category, Transaction } from '../types'
 
 export function exportAsJson(state: AppState) {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' })
   downloadBlob(blob, `greenfinance-backup-${new Date().toISOString().slice(0, 10)}.json`)
 }
 
-export function exportTransactionsAsCsv(transactions: Transaction[]) {
+export function exportTransactionsAsCsv(transactions: Transaction[], categories: Category[]) {
+  const categoryNameById = new Map(categories.map(c => [c.id, c.name]))
   const header = ['Data', 'Tipo', 'Valor', 'Descrição', 'Categoria', 'Forma de pagamento', 'Observação']
   const rows = transactions.map(t => [
     t.date,
     t.type === 'expense' ? 'Gasto' : 'Entrada',
     t.amount.toFixed(2),
     t.description,
-    t.categoryId,
+    categoryNameById.get(t.categoryId) ?? t.categoryId,
     t.paymentMethod ?? '',
     t.note ?? ''
   ])
@@ -39,13 +40,13 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-export function parseImportedJson(text: string): AppState | null {
+/** Parses the raw JSON text of an imported backup file. Only checks that the
+ * text is valid JSON — structural/semantic validation of the shape happens
+ * in `validateAndMigrate` (called by the store's `importData`), which can
+ * give more specific, recoverable feedback than a flat null. */
+export function parseImportedJson(text: string): unknown | null {
   try {
-    const data = JSON.parse(text)
-    if (data && typeof data === 'object' && Array.isArray(data.transactions) && data.settings) {
-      return data as AppState
-    }
-    return null
+    return JSON.parse(text)
   } catch {
     return null
   }

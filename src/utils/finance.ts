@@ -4,6 +4,35 @@ export function formatCurrency(value: number): string {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+/** Parses a pt-BR (or plain) decimal typed by the user in a form field, e.g.
+ * "1.234,56", "1234,56", "1234.56", "1234". Tolerant of a thousands
+ * separator, unlike a naive `parseFloat(str.replace(',', '.'))`. Returns
+ * NaN for empty/unparsable input. */
+export function parseAmountInput(raw: string): number {
+  let s = raw.replace(/[^0-9.,-]/g, '').trim()
+  if (!s) return NaN
+  const neg = s.startsWith('-')
+  s = s.replace(/-/g, '')
+  const hasComma = s.includes(',')
+  const hasDot = s.includes('.')
+  if (hasComma && hasDot) {
+    // '.' thousands, ',' decimal (pt-BR)
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else if (hasComma) {
+    s = s.replace(',', '.')
+  } else if (hasDot) {
+    const parts = s.split('.')
+    // A single dot followed by exactly 3 digits and nothing else is more
+    // likely a thousands separator ("1.234" = 1234) than a decimal.
+    if (parts.length === 2 && parts[1].length === 3) {
+      s = parts.join('')
+    }
+  }
+  const value = parseFloat(s)
+  if (isNaN(value)) return NaN
+  return neg ? -value : value
+}
+
 export function formatCompact(value: number): string {
   return value.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
 }
