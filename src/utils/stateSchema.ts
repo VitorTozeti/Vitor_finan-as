@@ -1,4 +1,16 @@
-import { AppState, Budget, Category, Goal, PortfolioAsset, RecurringRule, Transaction, UserSettings } from '../types'
+import {
+  AppState,
+  Benefit,
+  Budget,
+  CashbackProgram,
+  Category,
+  Goal,
+  PortfolioAsset,
+  RecurringRule,
+  Transaction,
+  UnlockedAchievement,
+  UserSettings
+} from '../types'
 import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from '../data/defaults'
 
 // Validates and migrates an unknown blob (from localStorage or an imported
@@ -8,7 +20,7 @@ import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from '../data/defaults'
 // history. Missing arrays introduced by newer schema versions (e.g.
 // recurringRules) default to empty so old backups keep working.
 
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 export interface ValidationSuccess {
   ok: true
@@ -103,6 +115,27 @@ function isRecurringRule(v: unknown): v is RecurringRule {
   )
 }
 
+function isBenefit(v: unknown): v is Benefit {
+  if (!isObject(v)) return false
+  return (
+    typeof v.id === 'string' &&
+    typeof v.name === 'string' &&
+    typeof v.type === 'string' &&
+    typeof v.amount === 'number' &&
+    typeof v.frequency === 'string'
+  )
+}
+
+function isCashbackProgram(v: unknown): v is CashbackProgram {
+  if (!isObject(v)) return false
+  return typeof v.id === 'string' && typeof v.name === 'string' && typeof v.unit === 'string' && Array.isArray(v.entries)
+}
+
+function isUnlockedAchievement(v: unknown): v is UnlockedAchievement {
+  if (!isObject(v)) return false
+  return typeof v.id === 'string' && typeof v.unlockedAt === 'string'
+}
+
 /** Validates an unknown blob and migrates it into the current AppState shape.
  * Requires at minimum a `transactions` array to be considered a plausible
  * GreenFinance backup — everything else is sanitized/defaulted rather than
@@ -124,6 +157,10 @@ export function validateAndMigrate(raw: unknown): ValidateResult {
   const goals = sanitizeArray(raw.goals, isGoal, 'metas', warnings)
   const portfolio = sanitizeArray(raw.portfolio, isPortfolioAsset, 'ativos', warnings)
   const recurringRules = sanitizeArray(raw.recurringRules, isRecurringRule, 'recorrências', warnings)
+  // Schema v3 arrays — default to empty so v1/v2 backups keep working.
+  const benefits = sanitizeArray(raw.benefits, isBenefit, 'benefícios', warnings)
+  const cashbackPrograms = sanitizeArray(raw.cashbackPrograms, isCashbackProgram, 'cashback', warnings)
+  const unlockedAchievements = sanitizeArray(raw.unlockedAchievements, isUnlockedAchievement, 'conquistas', warnings)
   const demoDataCleared = typeof raw.demoDataCleared === 'boolean' ? raw.demoDataCleared : false
 
   const state: AppState = {
@@ -134,6 +171,9 @@ export function validateAndMigrate(raw: unknown): ValidateResult {
     goals,
     portfolio,
     recurringRules,
+    benefits,
+    cashbackPrograms,
+    unlockedAchievements,
     demoDataCleared,
     schemaVersion: CURRENT_SCHEMA_VERSION
   }

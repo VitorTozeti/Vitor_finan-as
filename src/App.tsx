@@ -16,6 +16,7 @@ import Simulator from './pages/Simulator'
 import ConnectBank from './pages/ConnectBank'
 import Settings from './pages/Settings'
 import More from './pages/More'
+import Benefits from './pages/Benefits'
 import Onboarding from './pages/Onboarding'
 
 function AppShell() {
@@ -36,6 +37,7 @@ function AppShell() {
           <Route path="/investimentos" element={<Investments />} />
           <Route path="/investimentos/:ticker" element={<AssetAnalysis />} />
           <Route path="/carteira" element={<Portfolio />} />
+          <Route path="/beneficios" element={<Benefits />} />
           <Route path="/metas" element={<Goals />} />
           <Route path="/orcamento" element={<Budget />} />
           <Route path="/simulador" element={<Simulator />} />

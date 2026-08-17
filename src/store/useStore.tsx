@@ -1,6 +1,18 @@
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
-import { AppState, Transaction, Category, Budget, Goal, PortfolioAsset, RecurringRule, UserSettings } from '../types'
-import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS, buildDemoTransactions } from '../data/defaults'
+import {
+  AppState,
+  Transaction,
+  Category,
+  Budget,
+  Goal,
+  PortfolioAsset,
+  RecurringRule,
+  UserSettings,
+  Benefit,
+  CashbackProgram,
+  CashbackEntry
+} from '../types'
+import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS, buildDemoTransactions, DEMO_BENEFITS } from '../data/defaults'
 import { CURRENT_SCHEMA_VERSION, validateAndMigrate } from '../utils/stateSchema'
 import { pushToast } from '../components/Primitives'
 
@@ -18,6 +30,9 @@ function defaultState(): AppState {
     goals: [],
     portfolio: [],
     recurringRules: [],
+    benefits: DEMO_BENEFITS(),
+    cashbackPrograms: [],
+    unlockedAchievements: [],
     demoDataCleared: false,
     schemaVersion: CURRENT_SCHEMA_VERSION
   }
@@ -132,6 +147,13 @@ interface StoreValue {
   addRecurringRule: (rule: Omit<RecurringRule, 'id'>) => void
   updateRecurringRule: (id: string, patch: Partial<RecurringRule>) => void
   deleteRecurringRule: (id: string) => void
+  addBenefit: (benefit: Omit<Benefit, 'id'>) => void
+  updateBenefit: (id: string, patch: Partial<Benefit>) => void
+  deleteBenefit: (id: string) => void
+  addCashbackProgram: (program: Omit<CashbackProgram, 'id' | 'entries'>) => void
+  deleteCashbackProgram: (id: string) => void
+  addCashbackEntry: (programId: string, entry: Omit<CashbackEntry, 'id'>) => void
+  markAchievementsUnlocked: (ids: string[]) => void
   clearDemoData: () => void
   importData: (data: unknown) => void
   resetAll: () => void
@@ -291,10 +313,57 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, recurringRules: s.recurringRules.filter(r => r.id !== id) }))
   }, [])
 
+  const addBenefit = useCallback((benefit: Omit<Benefit, 'id'>) => {
+    setState(s => ({ ...s, benefits: [...s.benefits, { ...benefit, id: crypto.randomUUID() }] }))
+  }, [])
+
+  const updateBenefit = useCallback((id: string, patch: Partial<Benefit>) => {
+    setState(s => ({ ...s, benefits: s.benefits.map(b => (b.id === id ? { ...b, ...patch } : b)) }))
+  }, [])
+
+  const deleteBenefit = useCallback((id: string) => {
+    setState(s => ({ ...s, benefits: s.benefits.filter(b => b.id !== id) }))
+  }, [])
+
+  const addCashbackProgram = useCallback((program: Omit<CashbackProgram, 'id' | 'entries'>) => {
+    setState(s => ({
+      ...s,
+      cashbackPrograms: [...s.cashbackPrograms, { ...program, id: crypto.randomUUID(), entries: [] }]
+    }))
+  }, [])
+
+  const deleteCashbackProgram = useCallback((id: string) => {
+    setState(s => ({ ...s, cashbackPrograms: s.cashbackPrograms.filter(p => p.id !== id) }))
+  }, [])
+
+  const addCashbackEntry = useCallback((programId: string, entry: Omit<CashbackEntry, 'id'>) => {
+    setState(s => ({
+      ...s,
+      cashbackPrograms: s.cashbackPrograms.map(p =>
+        p.id === programId ? { ...p, entries: [...p.entries, { ...entry, id: crypto.randomUUID() }] } : p
+      )
+    }))
+  }, [])
+
+  const markAchievementsUnlocked = useCallback((ids: string[]) => {
+    if (ids.length === 0) return
+    setState(s => {
+      const known = new Set(s.unlockedAchievements.map(a => a.id))
+      const fresh = ids.filter(id => !known.has(id))
+      if (fresh.length === 0) return s
+      const now = new Date().toISOString()
+      return {
+        ...s,
+        unlockedAchievements: [...s.unlockedAchievements, ...fresh.map(id => ({ id, unlockedAt: now }))]
+      }
+    })
+  }, [])
+
   const clearDemoData = useCallback(() => {
     setState(s => ({
       ...s,
       transactions: s.transactions.filter(t => !t.id.startsWith('demo-')),
+      benefits: s.benefits.filter(b => !b.id.startsWith('demo-')),
       demoDataCleared: true
     }))
   }, [])
@@ -324,6 +393,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       goals: [],
       portfolio: [],
       recurringRules: [],
+      benefits: [],
+      cashbackPrograms: [],
+      unlockedAchievements: [],
       demoDataCleared: true,
       schemaVersion: CURRENT_SCHEMA_VERSION
     })
@@ -350,6 +422,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     addRecurringRule,
     updateRecurringRule,
     deleteRecurringRule,
+    addBenefit,
+    updateBenefit,
+    deleteBenefit,
+    addCashbackProgram,
+    deleteCashbackProgram,
+    addCashbackEntry,
+    markAchievementsUnlocked,
     clearDemoData,
     importData,
     resetAll

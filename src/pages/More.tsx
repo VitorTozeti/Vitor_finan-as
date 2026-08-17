@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
 import Header from '../components/Header'
 import { Card } from '../components/Primitives'
-import { Target, Wallet, Calculator, Settings, Briefcase, Landmark, ChevronRight } from 'lucide-react'
+import { Target, Wallet, Calculator, Settings, Briefcase, Landmark, ChevronRight, Gift } from 'lucide-react'
 
 const items = [
+  { to: '/beneficios', label: 'Benefícios', icon: Gift, desc: 'Benefícios, cashback e conquistas' },
   { to: '/metas', label: 'Metas financeiras', icon: Target, desc: 'Acompanhe seus objetivos' },
   { to: '/orcamento', label: 'Orçamento', icon: Wallet, desc: 'Defina limites por categoria' },
   { to: '/carteira', label: 'Carteira de investimentos', icon: Briefcase, desc: 'Seus ativos e rentabilidade' },

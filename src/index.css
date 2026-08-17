@@ -13,6 +13,17 @@ body {
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
+  background:
+    radial-gradient(1200px 600px at 100% -10%, rgba(31, 217, 138, 0.06), transparent 60%),
+    radial-gradient(900px 500px at -10% 0%, rgba(255, 180, 84, 0.05), transparent 55%),
+    #0b0f0d;
+  background-attachment: fixed;
+}
+
+/* Numbers and display headings use the Space Grotesk face with tabular figures. */
+.font-display {
+  font-feature-settings: 'tnum' 1, 'ss01' 1;
+  letter-spacing: -0.01em;
 }
 
 .scrollbar-none::-webkit-scrollbar {
@@ -49,6 +60,60 @@ body {
   animation: slideUp 0.25s ease-out;
 }
 
+@keyframes scaleIn {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.animate-scaleIn {
+  animation: scaleIn 0.2s ease-out;
+}
+
+/* Staggered entrance for lists of cards — apply .stagger to a parent and each
+   direct child fades/slides up in sequence for a lively, human feel. */
+@keyframes riseIn {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+.stagger > * {
+  animation: riseIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.stagger > *:nth-child(2) { animation-delay: 0.06s; }
+.stagger > *:nth-child(3) { animation-delay: 0.1s; }
+.stagger > *:nth-child(4) { animation-delay: 0.14s; }
+.stagger > *:nth-child(5) { animation-delay: 0.18s; }
+.stagger > *:nth-child(6) { animation-delay: 0.22s; }
+.stagger > *:nth-child(7) { animation-delay: 0.26s; }
+.stagger > *:nth-child(8) { animation-delay: 0.3s; }
+
+/* Subtle sheen for achievement badges / highlighted tiles. */
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to { background-position: 200% 0; }
+}
+.shimmer {
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.06) 50%,
+    transparent 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2.6s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -59,6 +124,6 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid #00d26a;
+  outline: 2px solid #1fd98a;
   outline-offset: 2px;
 }

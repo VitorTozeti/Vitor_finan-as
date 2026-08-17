@@ -1,4 +1,4 @@
-import { Category, Transaction, UserSettings } from '../types'
+import { Benefit, Category, Transaction, UserSettings } from '../types'
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'alimentacao', name: 'Alimentação', icon: '🍔' },
@@ -27,6 +27,16 @@ function isoDaysAgo(days: number): string {
   const d = new Date()
   d.setDate(d.getDate() - days)
   return d.toISOString().slice(0, 10)
+}
+
+/** Example benefits shown alongside the demo data so the Benefits screen isn't
+ * empty on first run. Cleared together with the rest of the demo dataset. */
+export function DEMO_BENEFITS(): Benefit[] {
+  return [
+    { id: 'demo-benefit-va', name: 'Vale-alimentação', type: 'VA', amount: 600, frequency: 'mensal', resetDay: 1, currentBalance: 420 },
+    { id: 'demo-benefit-vt', name: 'Vale-transporte', type: 'Transporte', amount: 220, frequency: 'mensal', resetDay: 1, currentBalance: 150 },
+    { id: 'demo-benefit-saude', name: 'Plano de saúde', type: 'Saúde', amount: 380, frequency: 'mensal' }
+  ]
 }
 
 export function buildDemoTransactions(): Transaction[] {

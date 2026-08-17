@@ -11,7 +11,8 @@ import {
   AreaGradient,
   SegmentedControl,
   StatTile,
-  TOOLTIP_STYLE
+  TOOLTIP_STYLE,
+  BRAND_GREEN
 } from '../components/ChartKit'
 import {
   PieChart,
@@ -218,13 +219,13 @@ export default function Charts() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={dailySeries}>
                   <defs>
-                    <AreaGradient id="grad-daily" color="#00D26A" />
+                    <AreaGradient id="grad-daily" color={BRAND_GREEN} />
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
                   <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} />
                   <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} tickFormatter={formatCurrencyShort} />
                   <Tooltip content={<MoneyTooltip />} />
-                  <Area type="monotone" dataKey="total" name="Acumulado" stroke="#00D26A" strokeWidth={2.5} fill="url(#grad-daily)" />
+                  <Area type="monotone" dataKey="total" name="Acumulado" stroke={BRAND_GREEN} strokeWidth={2.5} fill="url(#grad-daily)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -241,8 +242,8 @@ export default function Charts() {
                 <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} tickFormatter={formatCurrencyShort} />
                 <Tooltip content={<MoneyTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Entradas" fill="#00D26A" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Gastos" fill="#FF4D5A" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Entradas" fill={BRAND_GREEN} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Gastos" fill="#FF5A66" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

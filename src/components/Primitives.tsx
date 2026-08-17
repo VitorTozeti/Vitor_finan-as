@@ -2,12 +2,21 @@ import React, { useEffect } from 'react'
 import { X } from 'lucide-react'
 import { formatCurrency } from '../utils/finance'
 
-export function ProgressBar({ value, max, tone = 'green' }: { value: number; max: number; tone?: 'green' | 'warn' | 'danger' }) {
+export function ProgressBar({
+  value,
+  max,
+  tone = 'green'
+}: {
+  value: number
+  max: number
+  tone?: 'green' | 'warn' | 'danger' | 'accent'
+}) {
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0
   const colors: Record<string, string> = {
     green: 'bg-green',
     warn: 'bg-warn',
-    danger: 'bg-danger'
+    danger: 'bg-danger',
+    accent: 'bg-accent'
   }
   return (
     <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden">
@@ -19,22 +28,85 @@ export function ProgressBar({ value, max, tone = 'green' }: { value: number; max
   )
 }
 
-export function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-2xl bg-card border border-white/5 shadow-soft p-5 ${className}`}>{children}</div>
-  )
+export function Card({
+  children,
+  className = '',
+  variant = 'default'
+}: {
+  children: React.ReactNode
+  className?: string
+  /** default = flat card; elevated = subtle sheen; accent = warm glow border. */
+  variant?: 'default' | 'elevated' | 'accent'
+}) {
+  const base = 'rounded-2xl border shadow-soft p-5'
+  const variants: Record<string, string> = {
+    default: 'bg-card border-white/5',
+    elevated: 'bg-card bg-card-sheen border-white/10',
+    accent: 'bg-surface border-accent/25 shadow-glow-accent'
+  }
+  return <div className={`${base} ${variants[variant]} ${className}`}>{children}</div>
 }
 
 export function BalanceCard({ balance, spentLabel }: { balance: number; spentLabel: string }) {
   const positive = balance >= 0
   return (
-    <Card className="bg-gradient-to-br from-card to-bg2">
-      <p className="text-sm text-muted mb-1">Saldo disponível este mês</p>
-      <p className={`text-4xl font-extrabold tracking-tight ${positive ? 'text-txt' : 'text-danger'}`}>
-        {formatCurrency(balance)}
-      </p>
-      <p className="text-xs text-muted mt-2">{spentLabel}</p>
+    <Card className="relative overflow-hidden bg-gradient-to-br from-surface to-bg2">
+      <div className="absolute inset-0 bg-brand-fade opacity-70 pointer-events-none" />
+      <div className="relative">
+        <p className="text-sm text-muted mb-1">Saldo disponível este mês</p>
+        <p
+          className={`font-display text-[2.6rem] leading-none font-bold tracking-tight ${
+            positive ? 'text-txt' : 'text-danger'
+          }`}
+        >
+          {formatCurrency(balance)}
+        </p>
+        <p className="text-xs text-muted mt-3">{spentLabel}</p>
+      </div>
     </Card>
+  )
+}
+
+/** Achievement / status badge — locked shows muted & desaturated, unlocked glows. */
+export function Badge({
+  emoji,
+  title,
+  description,
+  unlocked = false,
+  progress
+}: {
+  emoji: string
+  title: string
+  description?: string
+  unlocked?: boolean
+  progress?: number
+}) {
+  return (
+    <div
+      className={`relative rounded-2xl border p-4 transition-all ${
+        unlocked
+          ? 'bg-surface border-green/25 shadow-glow'
+          : 'bg-card border-white/5 opacity-70'
+      }`}
+    >
+      {unlocked && <div className="absolute inset-0 rounded-2xl shimmer pointer-events-none" />}
+      <div className="relative">
+        <div
+          className={`h-11 w-11 rounded-xl flex items-center justify-center text-2xl mb-2 ${
+            unlocked ? 'bg-green/15' : 'bg-white/5 grayscale'
+          }`}
+        >
+          {emoji}
+        </div>
+        <p className={`text-sm font-semibold ${unlocked ? 'text-txt' : 'text-muted'}`}>{title}</p>
+        {description && <p className="text-[11px] text-muted mt-0.5 leading-snug">{description}</p>}
+        {!unlocked && progress != null && (
+          <div className="mt-2">
+            <ProgressBar value={progress} max={100} tone="accent" />
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 

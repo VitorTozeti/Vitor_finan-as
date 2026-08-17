@@ -2,24 +2,29 @@ import { TooltipProps } from 'recharts'
 import { formatCurrency } from '../utils/finance'
 
 // Central chart palette so every page reads as one system.
+// Brand green + warm accent lead; the rest are tuned to sit on the dark surface.
 export const CHART_COLORS = [
-  '#00D26A',
+  '#1FD98A',
+  '#FFB454',
   '#4E9AF1',
-  '#FFC857',
   '#B98CE0',
   '#5CD0B3',
   '#E37EC1',
   '#F5A623',
   '#7A8CFF',
-  '#00A854',
-  '#FF4D5A'
+  '#13B571',
+  '#FF5A66'
 ]
 
-export const AXIS_TICK = { fontSize: 11, fill: '#8B9690' } as const
+// Semantic single colors shared with the design tokens.
+export const BRAND_GREEN = '#1FD98A'
+export const BRAND_ACCENT = '#FFB454'
+
+export const AXIS_TICK = { fontSize: 11, fill: '#889389' } as const
 export const GRID_STROKE = 'rgba(255,255,255,0.06)'
 
 export const TOOLTIP_STYLE = {
-  background: '#151A17',
+  background: '#161D19',
   border: '1px solid rgba(255,255,255,0.1)',
   borderRadius: 12,
   fontSize: 12,
@@ -74,8 +79,8 @@ export function SegmentedControl<T extends string>({
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-            value === o.value ? 'bg-green text-bg' : 'text-muted hover:text-txt'
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all active:scale-95 ${
+            value === o.value ? 'bg-green text-bg shadow-glow' : 'text-muted hover:text-txt'
           }`}
         >
           {o.label}
@@ -95,13 +100,20 @@ export function StatTile({
   label: string
   value: string
   hint?: string
-  tone?: 'default' | 'green' | 'danger'
+  tone?: 'default' | 'green' | 'danger' | 'accent'
 }) {
-  const toneClass = tone === 'green' ? 'text-green' : tone === 'danger' ? 'text-danger' : 'text-txt'
+  const toneClass =
+    tone === 'green'
+      ? 'text-green'
+      : tone === 'danger'
+        ? 'text-danger'
+        : tone === 'accent'
+          ? 'text-accent'
+          : 'text-txt'
   return (
     <div className="rounded-xl bg-bg p-3">
       <p className="text-[11px] text-muted mb-1">{label}</p>
-      <p className={`text-sm font-bold ${toneClass}`}>{value}</p>
+      <p className={`font-display text-base font-bold ${toneClass}`}>{value}</p>
       {hint && <p className="text-[10px] text-muted mt-0.5">{hint}</p>}
     </div>
   )

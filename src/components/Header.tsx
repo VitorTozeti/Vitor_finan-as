@@ -19,7 +19,7 @@ export default function Header({ title, subtitle }: { title: string; subtitle?: 
     <header className="sticky top-0 z-30 bg-bg/90 backdrop-blur-lg px-5 pt-6 pb-3">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">{title}</h1>
           {subtitle && <p className="text-sm text-muted mt-0.5">{subtitle}</p>}
         </div>
         {!online && (

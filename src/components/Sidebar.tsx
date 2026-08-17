@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Home, Receipt, PieChart, TrendingUp, Settings, Target, Wallet, Calculator, Landmark } from 'lucide-react'
+import { Home, Receipt, PieChart, TrendingUp, Settings, Target, Wallet, Calculator, Landmark, Gift } from 'lucide-react'
 
 const items = [
   { to: '/', label: 'Início', icon: Home, end: true },
   { to: '/gastos', label: 'Gastos', icon: Receipt },
   { to: '/graficos', label: 'Gráficos', icon: PieChart },
   { to: '/investimentos', label: 'Investimentos', icon: TrendingUp },
+  { to: '/beneficios', label: 'Benefícios', icon: Gift },
   { to: '/metas', label: 'Metas', icon: Target },
   { to: '/orcamento', label: 'Orçamento', icon: Wallet },
   { to: '/simulador', label: 'Simulador', icon: Calculator },

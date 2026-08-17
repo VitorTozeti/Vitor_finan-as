@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import { Card, Skeleton } from '../components/Primitives'
 import { getQuote, QuoteResult, computePeriodPerformance, computeVolatility } from '../services/marketApi'
-import { formatCurrency } from '../utils/finance'
+import { formatCurrency, formatSignedPct } from '../utils/finance'
+import { AXIS_TICK, GRID_STROKE, MoneyTooltip, BRAND_GREEN } from '../components/ChartKit'
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 import { ChevronLeft, TrendingUp, TrendingDown } from 'lucide-react'
 
@@ -34,6 +35,9 @@ export default function AssetAnalysis() {
   const perf3m = computePeriodPerformance(quote?.history, 90)
   const perf6m = computePeriodPerformance(quote?.history, 180)
   const volatility = computeVolatility(quote?.history)
+  // Annualize the 6-month return (compounded twice), clamped to a sane band so a
+  // hot/cold half-year doesn't project absurd figures.
+  const annualRate = perf6m != null ? Math.max(-0.4, Math.min(0.5, Math.pow(1 + perf6m / 100, 2) - 1)) : 0
 
   return (
     <div className="pb-28">
@@ -66,7 +70,7 @@ export default function AssetAnalysis() {
             <Card>
               <p className="text-xs text-muted mb-1">{quote.name ?? quote.ticker}</p>
               <div className="flex items-end justify-between">
-                <p className="text-3xl font-extrabold">{formatCurrency(quote.price)}</p>
+                <p className="font-display text-3xl font-bold">{formatCurrency(quote.price)}</p>
                 <div className={`flex items-center gap-1 text-sm font-semibold ${quote.change >= 0 ? 'text-green' : 'text-danger'}`}>
                   {quote.change >= 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
                   {quote.change >= 0 ? '+' : ''}
@@ -95,14 +99,11 @@ export default function AssetAnalysis() {
                 <div className="h-52">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={quote.history}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#8B9690' }} axisLine={false} tickLine={false} minTickGap={40} />
-                      <YAxis tick={{ fontSize: 10, fill: '#8B9690' }} axisLine={false} tickLine={false} width={40} domain={['auto', 'auto']} />
-                      <Tooltip
-                        formatter={(v: number) => formatCurrency(v)}
-                        contentStyle={{ background: '#151A17', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, fontSize: 12 }}
-                      />
-                      <Line type="monotone" dataKey="close" stroke="#00D26A" strokeWidth={2} dot={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+                      <XAxis dataKey="date" tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} tickFormatter={(d: string) => d.slice(5)} />
+                      <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} domain={['auto', 'auto']} />
+                      <Tooltip content={<MoneyTooltip />} />
+                      <Line type="monotone" dataKey="close" name="Preço" stroke={BRAND_GREEN} strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -123,6 +124,33 @@ export default function AssetAnalysis() {
                 </p>
               )}
             </Card>
+
+            {perf6m != null && (
+              <Card variant="accent">
+                <p className="text-sm font-medium mb-1">Simulação de rendimento</p>
+                <p className="text-xs text-muted mb-3">
+                  Se R$ 1.000 rendessem como nos últimos 6 meses (~
+                  <span className="text-accent font-semibold">
+                    {formatSignedPct(annualRate * 100)} ao ano
+                  </span>
+                  ):
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[1, 5, 10].map(y => {
+                    const future = 1000 * Math.pow(1 + annualRate, y)
+                    return (
+                      <div key={y} className="rounded-xl bg-bg p-3">
+                        <p className="text-[11px] text-muted mb-1">Em {y} ano{y > 1 ? 's' : ''}</p>
+                        <p className="font-display text-sm font-bold text-accent">{formatCurrency(future)}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+                <p className="text-[11px] text-muted mt-3 leading-relaxed">
+                  Projeção hipotética a partir do desempenho recente — não é recomendação nem promessa de retorno.
+                </p>
+              </Card>
+            )}
 
             <Card>
               <p className="text-sm font-medium mb-2">Análise em linguagem simples</p>
@@ -151,9 +179,8 @@ function PerfBox({ label, value }: { label: string; value: number | null }) {
       {value == null ? (
         <p className="text-sm font-medium text-muted">—</p>
       ) : (
-        <p className={`text-sm font-semibold ${value >= 0 ? 'text-green' : 'text-danger'}`}>
-          {value >= 0 ? '+' : ''}
-          {value.toFixed(1)}%
+        <p className={`font-display text-sm font-bold ${value >= 0 ? 'text-green' : 'text-danger'}`}>
+          {formatSignedPct(value)}
         </p>
       )}
     </div>

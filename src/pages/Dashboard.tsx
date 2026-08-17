@@ -4,13 +4,23 @@ import { Card, ProgressBar, BalanceCard } from '../components/Primitives'
 import { useStore } from '../store/useStore'
 import { isSameMonth, sumByType, formatCurrency, getNextPayDate, daysUntil } from '../utils/finance'
 import { generateInsights, overallHealth } from '../utils/insights'
+import { summarizeBenefits } from '../utils/benefits'
 import TransactionForm from '../components/TransactionForm'
-import { Plus, ArrowUpRight, ArrowDownRight, Sparkles } from 'lucide-react'
+import { Plus, ArrowUpRight, ArrowDownRight, Sparkles, Gift, ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
+
+function greeting(): string {
+  const h = new Date().getHours()
+  if (h < 6) return 'Boa madrugada'
+  if (h < 12) return 'Bom dia'
+  if (h < 18) return 'Boa tarde'
+  return 'Boa noite'
+}
 
 export default function Dashboard() {
   const { state } = useStore()
   const [formOpen, setFormOpen] = useState(false)
+  const benefits = summarizeBenefits(state.benefits)
 
   const thisMonthTx = state.transactions.filter(t => isSameMonth(t.date))
   const income = sumByType(thisMonthTx, 'income') + state.settings.mainIncome
@@ -48,7 +58,7 @@ export default function Dashboard() {
 
   return (
     <div className="pb-28">
-      <Header title="Olá 👋" subtitle="Aqui está sua visão financeira" />
+      <Header title={`${greeting()} 👋`} subtitle="Aqui está sua visão financeira" />
       <div className="px-5 space-y-4">
         <BalanceCard
           balance={available}
@@ -60,13 +70,13 @@ export default function Dashboard() {
             <div className="flex items-center gap-1.5 text-muted text-xs mb-1">
               <ArrowUpRight size={14} className="text-green" /> Entradas
             </div>
-            <p className="text-lg font-bold">{formatCurrency(income)}</p>
+            <p className="font-display text-lg font-bold">{formatCurrency(income)}</p>
           </Card>
           <Card className="!p-4">
             <div className="flex items-center gap-1.5 text-muted text-xs mb-1">
               <ArrowDownRight size={14} className="text-danger" /> Gastos
             </div>
-            <p className="text-lg font-bold">{formatCurrency(expenses)}</p>
+            <p className="font-display text-lg font-bold">{formatCurrency(expenses)}</p>
           </Card>
         </div>
 
@@ -96,6 +106,23 @@ export default function Dashboard() {
             </div>
           </div>
         </Card>
+
+        {benefits.count > 0 && (
+          <Link to="/beneficios" className="block">
+            <Card variant="accent" className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-accent/15 flex items-center justify-center text-accent">
+                <Gift size={18} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold">
+                  Você recebe {formatCurrency(benefits.monthlyTotal)}/mês em benefícios
+                </p>
+                <p className="text-xs text-muted">Veja saldo, cashback e suas conquistas</p>
+              </div>
+              <ChevronRight size={16} className="text-muted" />
+            </Card>
+          </Link>
+        )}
 
         {topCategories.length > 0 && (
           <Card>

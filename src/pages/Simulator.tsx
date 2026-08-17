@@ -4,7 +4,7 @@ import Header from '../components/Header'
 import { Card } from '../components/Primitives'
 import { formatCurrency, formatCurrencyShort } from '../utils/finance'
 import { PROFILE_PRESETS, presetById, RiskProfile } from '../data/investing'
-import { AXIS_TICK, GRID_STROKE, MoneyTooltip, AreaGradient, StatTile } from '../components/ChartKit'
+import { AXIS_TICK, GRID_STROKE, MoneyTooltip, AreaGradient, StatTile, BRAND_GREEN } from '../components/ChartKit'
 import {
   AreaChart,
   Area,
@@ -227,8 +227,8 @@ export default function Simulator() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={sim.points}>
                 <defs>
-                  <AreaGradient id="grad-patr" color="#00D26A" />
-                  <AreaGradient id="grad-inv" color="#8B9690" />
+                  <AreaGradient id="grad-patr" color={BRAND_GREEN} />
+                  <AreaGradient id="grad-inv" color="#889389" />
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
                 <XAxis
@@ -240,8 +240,8 @@ export default function Simulator() {
                 />
                 <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} tickFormatter={formatCurrencyShort} />
                 <Tooltip content={<MoneyTooltip />} />
-                <Area type="monotone" dataKey="investido" name="Investido" stroke="#8B9690" strokeWidth={1.5} fill="url(#grad-inv)" strokeDasharray="4 4" dot={false} />
-                <Area type="monotone" dataKey="patrimonio" name="Patrimônio" stroke="#00D26A" strokeWidth={2.5} fill="url(#grad-patr)" dot={false} />
+                <Area type="monotone" dataKey="investido" name="Investido" stroke="#889389" strokeWidth={1.5} fill="url(#grad-inv)" strokeDasharray="4 4" dot={false} />
+                <Area type="monotone" dataKey="patrimonio" name="Patrimônio" stroke={BRAND_GREEN} strokeWidth={2.5} fill="url(#grad-patr)" dot={false} />
                 {num(goal) > 0 && (
                   <ReferenceLine y={num(goal)} stroke="#FFC857" strokeDasharray="5 4" label={{ value: 'Meta', fill: '#FFC857', fontSize: 10, position: 'insideTopRight' }} />
                 )}
