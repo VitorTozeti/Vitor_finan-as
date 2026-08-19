@@ -25,6 +25,8 @@ jobs:
           cache: npm
       - run: npm install
       - run: npm run build
+        env:
+          VITE_BRAPI_TOKEN: ${{ secrets.VITE_BRAPI_TOKEN }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
