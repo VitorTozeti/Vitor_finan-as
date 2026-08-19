@@ -4,16 +4,20 @@ import Header from '../components/Header'
 import { Card, Skeleton } from '../components/Primitives'
 import { getQuote, QuoteResult, computePeriodPerformance, computeVolatility } from '../services/marketApi'
 import { formatCurrency, formatSignedPct } from '../utils/finance'
-import { AXIS_TICK, GRID_STROKE, MoneyTooltip, BRAND_GREEN } from '../components/ChartKit'
+import { AXIS_TICK, GRID_STROKE, MoneyTooltip, SegmentedControl, useChartTheme } from '../components/ChartKit'
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts'
 import { ChevronLeft, TrendingUp, TrendingDown } from 'lucide-react'
+
+const RANGE_DAYS: Record<string, number> = { '1M': 30, '3M': 90, '6M': 180 }
 
 export default function AssetAnalysis() {
   const { ticker } = useParams()
   const navigate = useNavigate()
+  const chart = useChartTheme()
   const [quote, setQuote] = useState<QuoteResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [range, setRange] = useState<'1M' | '3M' | '6M'>('6M')
 
   useEffect(() => {
     let active = true
@@ -35,6 +39,15 @@ export default function AssetAnalysis() {
   const perf3m = computePeriodPerformance(quote?.history, 90)
   const perf6m = computePeriodPerformance(quote?.history, 180)
   const volatility = computeVolatility(quote?.history)
+  // History sliced to the selected window for the chart.
+  const chartData = (() => {
+    const h = quote?.history
+    if (!h || h.length === 0) return []
+    const days = RANGE_DAYS[range]
+    const cutoff = new Date(h[h.length - 1].date).getTime() - days * 86400000
+    const sliced = h.filter(p => new Date(p.date).getTime() >= cutoff)
+    return sliced.length > 1 ? sliced : h
+  })()
   // Annualize the 6-month return (compounded twice), clamped to a sane band so a
   // hot/cold half-year doesn't project absurd figures.
   const annualRate = perf6m != null ? Math.max(-0.4, Math.min(0.5, Math.pow(1 + perf6m / 100, 2) - 1)) : 0
@@ -95,15 +108,26 @@ export default function AssetAnalysis() {
 
             {quote.history && quote.history.length > 1 && (
               <Card>
-                <p className="text-sm font-medium mb-3">Histórico (6 meses)</p>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium">Histórico de preço</p>
+                  <SegmentedControl
+                    options={[
+                      { value: '1M', label: '1M' },
+                      { value: '3M', label: '3M' },
+                      { value: '6M', label: '6M' }
+                    ]}
+                    value={range}
+                    onChange={setRange}
+                  />
+                </div>
                 <div className="h-52">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={quote.history}>
+                    <LineChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
                       <XAxis dataKey="date" tick={AXIS_TICK} axisLine={false} tickLine={false} minTickGap={40} tickFormatter={(d: string) => d.slice(5)} />
                       <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={44} domain={['auto', 'auto']} />
                       <Tooltip content={<MoneyTooltip />} />
-                      <Line type="monotone" dataKey="close" name="Preço" stroke={BRAND_GREEN} strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="close" name="Preço" stroke={chart.green} strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>

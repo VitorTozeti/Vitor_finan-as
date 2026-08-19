@@ -61,11 +61,11 @@ export default function Expenses() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar transação..."
-            className="w-full rounded-xl bg-card border border-white/5 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-green"
+            className="w-full rounded-xl bg-card border border-line/5 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-green"
           />
         </div>
 
-        <div className="inline-flex w-full rounded-xl bg-bg border border-white/10 p-0.5 gap-0.5">
+        <div className="inline-flex w-full rounded-xl bg-bg border border-line/10 p-0.5 gap-0.5">
           {TYPE_FILTERS.map(t => (
             <button
               key={t.value}
@@ -83,7 +83,7 @@ export default function Expenses() {
           <button
             onClick={() => setFilterCat('all')}
             className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium border ${
-              filterCat === 'all' ? 'bg-green/15 border-green text-green' : 'border-white/10 text-muted'
+              filterCat === 'all' ? 'bg-green/15 border-green text-green' : 'border-line/10 text-muted'
             }`}
           >
             Todas
@@ -93,7 +93,7 @@ export default function Expenses() {
               key={c.id}
               onClick={() => setFilterCat(c.id)}
               className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium border flex items-center gap-1 ${
-                filterCat === c.id ? 'bg-green/15 border-green text-green' : 'border-white/10 text-muted'
+                filterCat === c.id ? 'bg-green/15 border-green text-green' : 'border-line/10 text-muted'
               }`}
             >
               <span>{c.icon}</span>
@@ -130,7 +130,7 @@ export default function Expenses() {
             {filtered.length > visible.length && (
               <button
                 onClick={() => setVisibleCount(v => v + PAGE_SIZE)}
-                className="w-full rounded-xl bg-white/5 py-2.5 text-xs font-medium text-muted"
+                className="w-full rounded-xl bg-line/5 py-2.5 text-xs font-medium text-muted"
               >
                 Carregar mais ({filtered.length - visible.length} restantes)
               </button>

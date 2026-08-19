@@ -20,7 +20,7 @@ export interface ParsedStatementTx {
 
 export interface ParseResult {
   transactions: ParsedStatementTx[]
-  format: 'OFX' | 'CSV'
+  format: 'OFX' | 'CSV' | 'PDF'
   warnings: string[]
 }
 
@@ -342,4 +342,129 @@ function parseCsv(text: string, categories: Category[], dateFormat: DateFormatHi
 export function parseStatement(text: string, filename: string, categories: Category[], opts: ParseOptions = {}): ParseResult {
   const isOfx = /\.ofx$/i.test(filename) || /<OFX>|<STMTTRN>/i.test(text)
   return isOfx ? parseOfx(text, categories) : parseCsv(text, categories, opts.dateFormat ?? 'auto')
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PDF statement parsing (Itaú and similar layouts).
+//
+// PDFs have no column structure once the text is extracted, so we work from
+// visually-reconstructed lines (see utils/pdfExtract.ts) and parse each line
+// heuristically: a leading date, a trailing monetary value, and the text in
+// between as the description. Bank PDF layouts vary, so this is best-effort —
+// everything still goes through the manual review screen before saving.
+// ─────────────────────────────────────────────────────────────────────────
+
+// A pt-BR money token, optionally signed (leading or trailing '-', or a
+// trailing 'D' debit / 'C' credit marker some banks print).
+const MONEY_RE = /-?\s?\d{1,3}(?:\.\d{3})*,\d{2}\s?[-DC]?/gi
+const DATE_RE = /^(\d{2})\/(\d{2})(?:\/(\d{2,4}))?/
+
+// Descriptions that clearly indicate money coming IN, so an unsigned value is
+// classified as income rather than the expense default.
+const INCOME_HINTS = [
+  'pix recebid',
+  'ted recebid',
+  'doc recebid',
+  'transf recebid',
+  'recebimento',
+  'salario',
+  'salário',
+  'provento',
+  'rendimento',
+  'estorno',
+  'reembolso',
+  'deposito',
+  'depósito',
+  'credito',
+  'crédito',
+  'devolucao',
+  'devolução',
+  'resgate'
+]
+
+function moneyTokenToNumber(token: string): { value: number; signed: boolean } {
+  const t = token.trim()
+  const trailingDebit = /-\s*$/.test(t) || /d$/i.test(t)
+  const trailingCredit = /c$/i.test(t)
+  const leadingNeg = /^-/.test(t)
+  const cleaned = t.replace(/[^0-9.,]/g, '')
+  const magnitude = parseAmountDetailed(cleaned).value
+  if (isNaN(magnitude)) return { value: NaN, signed: false }
+  const negative = leadingNeg || trailingDebit
+  const signed = leadingNeg || trailingDebit || trailingCredit
+  return { value: negative ? -Math.abs(magnitude) : Math.abs(magnitude), signed }
+}
+
+/** Parses visually-reconstructed statement lines from a PDF. `fallbackYear`
+ * fills in when a line's date has no year (common in single-month extracts). */
+export function parseStatementLines(lines: string[], categories: Category[]): ParseResult {
+  const warnings: string[] = []
+  const transactions: ParsedStatementTx[] = []
+
+  // Infer a reference year from any full date in the document (else current).
+  let refYear = new Date().getFullYear()
+  for (const line of lines) {
+    const m = line.match(/\b\d{2}\/\d{2}\/(\d{4})\b/)
+    if (m) {
+      refYear = Number(m[1])
+      break
+    }
+  }
+
+  let ambiguousCount = 0
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\s+/g, ' ').trim()
+    const dateMatch = line.match(DATE_RE)
+    if (!dateMatch) continue
+    const dd = dateMatch[1]
+    const mm = dateMatch[2]
+    if (Number(dd) > 31 || Number(mm) > 12) continue
+    const yyyy = dateMatch[3] ? (dateMatch[3].length === 2 ? `20${dateMatch[3]}` : dateMatch[3]) : String(refYear)
+    const date = `${yyyy}-${mm}-${dd}`
+
+    const moneyTokens = line.match(MONEY_RE)
+    if (!moneyTokens || moneyTokens.length === 0) continue
+    // First money token on the line is the transaction value; a second one (if
+    // present) is typically the running balance and is ignored.
+    const first = moneyTokenToNumber(moneyTokens[0])
+    if (isNaN(first.value) || first.value === 0) continue
+
+    // Description = line minus the leading date and all money tokens.
+    let desc = line.slice(dateMatch[0].length)
+    for (const tok of moneyTokens) desc = desc.replace(tok, ' ')
+    const description = cleanDescription(desc.replace(/\s+/g, ' ').trim()) || 'Lançamento'
+
+    // Direction: use the sign when the token carried one; otherwise fall back
+    // to income keywords, defaulting to expense (the common case in a
+    // statement/card bill).
+    let type: 'income' | 'expense'
+    if (first.signed) {
+      type = first.value >= 0 ? 'income' : 'expense'
+    } else {
+      const lower = description.toLowerCase()
+      type = INCOME_HINTS.some(h => lower.includes(h)) ? 'income' : 'expense'
+      ambiguousCount++
+    }
+
+    transactions.push({
+      date,
+      amount: Math.abs(first.value),
+      type,
+      description,
+      categoryId: guessCategory(description, type, categories),
+      ambiguousAmount: false
+    })
+  }
+
+  if (transactions.length === 0) {
+    warnings.push(
+      'Não consegui identificar lançamentos neste PDF. O layout pode ser diferente do esperado — confira na revisão ou tente exportar em CSV/OFX.'
+    )
+  }
+  if (ambiguousCount > 0) {
+    warnings.push(
+      `${ambiguousCount} lançamento(s) não traziam sinal de entrada/saída — assumi como gasto quando não havia indício de entrada. Revise e inverta se necessário.`
+    )
+  }
+  return { transactions, format: 'PDF', warnings }
 }

@@ -16,7 +16,7 @@ const items = [
 
 export default function Sidebar() {
   return (
-    <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-white/5 bg-bg2 px-4 py-6">
+    <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-line/5 bg-bg2 px-4 py-6">
       <div className="mb-8 flex items-center gap-2 px-2">
         <div className="h-8 w-8 rounded-lg bg-green flex items-center justify-center text-bg font-bold text-sm">G</div>
         <span className="text-lg font-semibold tracking-tight">GreenFinance</span>
@@ -29,7 +29,7 @@ export default function Sidebar() {
             end={end}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive ? 'bg-green/10 text-green' : 'text-muted hover:bg-white/5 hover:text-txt'
+                isActive ? 'bg-green/10 text-green' : 'text-muted hover:bg-line/5 hover:text-txt'
               }`
             }
           >

@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { StoreProvider, useStore } from './store/useStore'
+import { applyTheme } from './data/themes'
 import BottomNavigation from './components/BottomNavigation'
 import Sidebar from './components/Sidebar'
 import { ToastHost } from './components/Primitives'
@@ -21,6 +23,11 @@ import Onboarding from './pages/Onboarding'
 
 function AppShell() {
   const { state } = useStore()
+
+  // Keep the document theme in sync with the user's setting.
+  useEffect(() => {
+    applyTheme(state.settings.theme)
+  }, [state.settings.theme])
 
   if (!state.settings.onboarded) {
     return <Onboarding />

@@ -62,7 +62,7 @@ export default function Budget() {
                       value={value}
                       onChange={e => setValue(e.target.value)}
                       placeholder="Limite"
-                      className="w-24 rounded-lg bg-bg border border-white/10 px-2 py-1 text-xs outline-none focus:border-green"
+                      className="w-24 rounded-lg bg-bg border border-line/10 px-2 py-1 text-xs outline-none focus:border-green"
                     />
                     <button onClick={() => save(cat.id)} className="text-xs font-semibold text-green">
                       Salvar

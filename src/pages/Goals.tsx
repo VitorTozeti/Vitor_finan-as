@@ -66,7 +66,7 @@ export default function Goals() {
                   <input
                     type="number"
                     placeholder="Adicionar valor"
-                    className="flex-1 rounded-lg bg-bg border border-white/10 px-3 py-1.5 text-xs outline-none focus:border-green"
+                    className="flex-1 rounded-lg bg-bg border border-line/10 px-3 py-1.5 text-xs outline-none focus:border-green"
                     onKeyDown={e => {
                       if (e.key === 'Enter') {
                         const val = parseFloat((e.target as HTMLInputElement).value)
@@ -101,7 +101,7 @@ export default function Goals() {
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Ex: Comprar notebook"
-              className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+              className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -111,7 +111,7 @@ export default function Goals() {
                 inputMode="decimal"
                 value={target}
                 onChange={e => setTarget(e.target.value)}
-                className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
               />
             </div>
             <div>
@@ -120,7 +120,7 @@ export default function Goals() {
                 inputMode="decimal"
                 value={saved}
                 onChange={e => setSaved(e.target.value)}
-                className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
               />
             </div>
           </div>
@@ -130,7 +130,7 @@ export default function Goals() {
               type="date"
               value={deadline}
               onChange={e => setDeadline(e.target.value)}
-              className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+              className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
             />
           </div>
           <button onClick={handleAdd} className="w-full rounded-xl bg-green py-3.5 font-semibold text-bg">

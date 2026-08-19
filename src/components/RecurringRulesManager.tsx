@@ -64,7 +64,7 @@ export default function RecurringRulesManager() {
 
       {showForm && (
         <div className="rounded-xl bg-bg p-3 mb-3 space-y-2.5">
-          <div className="flex rounded-lg bg-white/5 p-1">
+          <div className="flex rounded-lg bg-line/5 p-1">
             {(['expense', 'income'] as const).map(t => (
               <button
                 key={t}
@@ -81,7 +81,7 @@ export default function RecurringRulesManager() {
             value={description}
             onChange={e => setDescription(e.target.value)}
             placeholder="Descrição (ex: Aluguel)"
-            className="w-full rounded-lg bg-card border border-white/10 px-3 py-2 text-sm outline-none focus:border-green"
+            className="w-full rounded-lg bg-card border border-line/10 px-3 py-2 text-sm outline-none focus:border-green"
           />
           <div className="grid grid-cols-2 gap-2">
             <input
@@ -89,20 +89,20 @@ export default function RecurringRulesManager() {
               value={amount}
               onChange={e => setAmount(e.target.value)}
               placeholder="Valor"
-              className="rounded-lg bg-card border border-white/10 px-3 py-2 text-sm outline-none focus:border-green"
+              className="rounded-lg bg-card border border-line/10 px-3 py-2 text-sm outline-none focus:border-green"
             />
             <input
               inputMode="numeric"
               value={dayOfMonth}
               onChange={e => setDayOfMonth(e.target.value)}
               placeholder="Dia do mês"
-              className="rounded-lg bg-card border border-white/10 px-3 py-2 text-sm outline-none focus:border-green"
+              className="rounded-lg bg-card border border-line/10 px-3 py-2 text-sm outline-none focus:border-green"
             />
           </div>
           <select
             value={categoryId}
             onChange={e => setCategoryId(e.target.value)}
-            className="w-full rounded-lg bg-card border border-white/10 px-3 py-2 text-sm outline-none focus:border-green"
+            className="w-full rounded-lg bg-card border border-line/10 px-3 py-2 text-sm outline-none focus:border-green"
           >
             {state.categories.map(c => (
               <option key={c.id} value={c.id}>
@@ -133,7 +133,7 @@ export default function RecurringRulesManager() {
               <button
                 onClick={() => updateRecurringRule(rule.id, { active: !rule.active })}
                 className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                  rule.active ? 'bg-green/15 text-green' : 'bg-white/10 text-muted'
+                  rule.active ? 'bg-green/15 text-green' : 'bg-line/10 text-muted'
                 }`}
               >
                 {rule.active ? 'Ativa' : 'Pausada'}

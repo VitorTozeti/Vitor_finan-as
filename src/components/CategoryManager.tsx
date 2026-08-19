@@ -45,13 +45,13 @@ export default function CategoryManager() {
                 <input
                   value={icon}
                   onChange={e => setIcon(e.target.value)}
-                  className="w-11 shrink-0 rounded-lg bg-card border border-white/10 px-2 py-1.5 text-sm text-center outline-none focus:border-green"
+                  className="w-11 shrink-0 rounded-lg bg-card border border-line/10 px-2 py-1.5 text-sm text-center outline-none focus:border-green"
                 />
                 <input
                   autoFocus
                   value={name}
                   onChange={e => setName(e.target.value)}
-                  className="flex-1 min-w-0 rounded-lg bg-card border border-white/10 px-2 py-1.5 text-sm outline-none focus:border-green"
+                  className="flex-1 min-w-0 rounded-lg bg-card border border-line/10 px-2 py-1.5 text-sm outline-none focus:border-green"
                 />
                 <button onClick={saveEdit} aria-label="Salvar" className="text-green shrink-0">
                   <Check size={16} />

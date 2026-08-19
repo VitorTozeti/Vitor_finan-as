@@ -12,8 +12,11 @@ import {
   computeConqueredSavings
 } from '../utils/benefits'
 import { getMultipleQuotes } from '../services/marketApi'
-import { BenefitType, BenefitFrequency, CashbackUnit } from '../types'
-import { Plus, Sparkles, Wallet, Trash2 } from 'lucide-react'
+import { Benefit, BenefitType, BenefitFrequency, CashbackUnit } from '../types'
+import { Plus, Sparkles, Wallet, Trash2, Pencil, CalendarClock } from 'lucide-react'
+
+// Common Brazilian benefit-card operators, offered as quick suggestions.
+const PROVIDERS = ['Alelo', 'VR', 'Ticket', 'Sodexo/Pluxee', 'Caju', 'Flash', 'Ben', 'iFood Benefícios']
 
 const BENEFIT_TYPES: { value: BenefitType; label: string; emoji: string }[] = [
   { value: 'VA', label: 'Vale-alimentação', emoji: '🍽️' },
@@ -32,6 +35,7 @@ export default function Benefits() {
   const {
     state,
     addBenefit,
+    updateBenefit,
     deleteBenefit,
     addCashbackProgram,
     deleteCashbackProgram,
@@ -89,7 +93,7 @@ export default function Benefits() {
         </Card>
 
         {/* Tabs */}
-        <div className="inline-flex w-full rounded-xl bg-bg border border-white/10 p-0.5 gap-0.5">
+        <div className="inline-flex w-full rounded-xl bg-bg border border-line/10 p-0.5 gap-0.5">
           {(
             [
               { value: 'empresa', label: 'Da empresa' },
@@ -109,7 +113,9 @@ export default function Benefits() {
           ))}
         </div>
 
-        {tab === 'empresa' && <CompanyBenefits summary={summary} onAdd={addBenefit} onDelete={deleteBenefit} />}
+        {tab === 'empresa' && (
+          <CompanyBenefits summary={summary} onAdd={addBenefit} onUpdate={updateBenefit} onDelete={deleteBenefit} />
+        )}
         {tab === 'cashback' && (
           <CashbackSection
             onAddProgram={addCashbackProgram}
@@ -139,39 +145,79 @@ export default function Benefits() {
 function CompanyBenefits({
   summary,
   onAdd,
+  onUpdate,
   onDelete
 }: {
   summary: ReturnType<typeof summarizeBenefits>
   onAdd: ReturnType<typeof useStore>['addBenefit']
+  onUpdate: ReturnType<typeof useStore>['updateBenefit']
   onDelete: (id: string) => void
 }) {
   const { state } = useStore()
   const [open, setOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [type, setType] = useState<BenefitType>('VA')
   const [amount, setAmount] = useState('')
   const [frequency, setFrequency] = useState<BenefitFrequency>('mensal')
   const [balance, setBalance] = useState('')
+  const [provider, setProvider] = useState('')
+  const [resetDay, setResetDay] = useState('')
 
-  function handleAdd() {
+  function resetForm() {
+    setName('')
+    setType('VA')
+    setAmount('')
+    setFrequency('mensal')
+    setBalance('')
+    setProvider('')
+    setResetDay('')
+    setEditingId(null)
+  }
+
+  function openAdd() {
+    resetForm()
+    setOpen(true)
+  }
+
+  function openEdit(b: Benefit) {
+    setEditingId(b.id)
+    setName(b.name)
+    setType(b.type)
+    setAmount(String(b.amount))
+    setFrequency(b.frequency)
+    setBalance(b.currentBalance != null ? String(b.currentBalance) : '')
+    setProvider(b.provider ?? '')
+    setResetDay(b.resetDay != null ? String(b.resetDay) : '')
+    setOpen(true)
+  }
+
+  function handleSave() {
     const value = parseAmountInput(amount)
     if (!name.trim() || isNaN(value)) {
       pushToast('Preencha nome e valor', 'error')
       return
     }
     const bal = parseAmountInput(balance)
-    onAdd({
+    const day = parseInt(resetDay, 10)
+    const payload = {
       name: name.trim(),
       type,
       amount: value,
       frequency,
-      currentBalance: isNaN(bal) ? undefined : bal
-    })
-    pushToast('Benefício adicionado')
-    setName('')
-    setAmount('')
-    setBalance('')
+      currentBalance: isNaN(bal) ? undefined : bal,
+      provider: provider.trim() || undefined,
+      resetDay: day >= 1 && day <= 31 ? day : undefined
+    }
+    if (editingId) {
+      onUpdate(editingId, payload)
+      pushToast('Benefício atualizado')
+    } else {
+      onAdd(payload)
+      pushToast('Benefício adicionado')
+    }
+    resetForm()
     setOpen(false)
   }
 
@@ -193,7 +239,7 @@ function CompanyBenefits({
           title="Nenhum benefício cadastrado"
           description="Adicione vale-alimentação, transporte, plano de saúde e outros benefícios que você recebe."
           actionLabel="Adicionar benefício"
-          onAction={() => setOpen(true)}
+          onAction={openAdd}
         />
       ) : (
         <div className="space-y-2 stagger">
@@ -205,12 +251,23 @@ function CompanyBenefits({
                   {meta.emoji}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{b.name}</p>
+                  <p className="text-sm font-semibold truncate">
+                    {b.name}
+                    {b.provider ? <span className="text-muted font-normal"> · {b.provider}</span> : ''}
+                  </p>
                   <p className="text-xs text-muted">
                     {formatCurrency(monthlyValue(b))}/mês · {b.frequency}
                     {b.currentBalance != null ? ` · saldo ${formatCurrency(b.currentBalance)}` : ''}
                   </p>
+                  {b.resetDay != null && (
+                    <p className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
+                      <CalendarClock size={11} /> crédito todo dia {b.resetDay}
+                    </p>
+                  )}
                 </div>
+                <button onClick={() => openEdit(b)} className="text-muted hover:text-txt p-1" aria-label="Editar">
+                  <Pencil size={15} />
+                </button>
                 <button
                   onClick={() => setPendingDelete(b.id)}
                   className="text-muted hover:text-danger p-1"
@@ -225,14 +282,21 @@ function CompanyBenefits({
       )}
 
       <button
-        onClick={() => setOpen(true)}
+        onClick={openAdd}
         aria-label="Adicionar benefício"
         className="fixed bottom-24 right-5 md:bottom-8 h-14 w-14 rounded-full bg-green text-bg flex items-center justify-center shadow-glow active:scale-95 transition-transform z-30"
       >
         <Plus size={26} />
       </button>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Adicionar benefício">
+      <Modal
+        open={open}
+        onClose={() => {
+          resetForm()
+          setOpen(false)
+        }}
+        title={editingId ? 'Editar benefício' : 'Adicionar benefício'}
+      >
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-muted mb-1.5">Nome</label>
@@ -240,7 +304,7 @@ function CompanyBenefits({
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Ex: Vale-alimentação"
-              className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+              className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
             />
           </div>
           <div>
@@ -251,7 +315,7 @@ function CompanyBenefits({
                   key={t.value}
                   onClick={() => setType(t.value)}
                   className={`rounded-xl border px-2 py-2 text-xs font-medium transition-all active:scale-95 ${
-                    type === t.value ? 'border-green bg-green/10 text-green' : 'border-white/10 text-muted'
+                    type === t.value ? 'border-green bg-green/10 text-green' : 'border-line/10 text-muted'
                   }`}
                 >
                   <span className="block text-base mb-0.5">{t.emoji}</span>
@@ -268,7 +332,7 @@ function CompanyBenefits({
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
                 placeholder="600"
-                className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
               />
             </div>
             <div>
@@ -278,13 +342,40 @@ function CompanyBenefits({
                 value={balance}
                 onChange={e => setBalance(e.target.value)}
                 placeholder="420"
-                className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-muted mb-1.5">Operadora (opcional)</label>
+              <input
+                value={provider}
+                onChange={e => setProvider(e.target.value)}
+                list="benefit-providers"
+                placeholder="Ex: Alelo"
+                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+              />
+              <datalist id="benefit-providers">
+                {PROVIDERS.map(p => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-muted mb-1.5">Dia do crédito (opcional)</label>
+              <input
+                inputMode="numeric"
+                value={resetDay}
+                onChange={e => setResetDay(e.target.value)}
+                placeholder="1"
+                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
               />
             </div>
           </div>
           <div>
             <label className="block text-xs font-medium text-muted mb-1.5">Frequência</label>
-            <div className="inline-flex w-full rounded-xl bg-bg border border-white/10 p-0.5 gap-0.5">
+            <div className="inline-flex w-full rounded-xl bg-bg border border-line/10 p-0.5 gap-0.5">
               {(['mensal', 'anual', 'único'] as BenefitFrequency[]).map(f => (
                 <button
                   key={f}
@@ -298,8 +389,8 @@ function CompanyBenefits({
               ))}
             </div>
           </div>
-          <button onClick={handleAdd} className="w-full rounded-xl bg-green py-3.5 font-semibold text-bg active:scale-95 transition-transform">
-            Adicionar
+          <button onClick={handleSave} className="w-full rounded-xl bg-green py-3.5 font-semibold text-bg active:scale-95 transition-transform">
+            {editingId ? 'Salvar alterações' : 'Adicionar'}
           </button>
         </div>
       </Modal>
@@ -422,12 +513,12 @@ function CashbackSection({
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Ex: Nubank Rewards"
-              className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+              className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-muted mb-1.5">Unidade</label>
-            <div className="inline-flex w-full rounded-xl bg-bg border border-white/10 p-0.5 gap-0.5">
+            <div className="inline-flex w-full rounded-xl bg-bg border border-line/10 p-0.5 gap-0.5">
               {(['R$', 'pontos', 'milhas'] as CashbackUnit[]).map(u => (
                 <button
                   key={u}
@@ -457,7 +548,7 @@ function CashbackSection({
               onChange={e => setEntryAmount(e.target.value)}
               placeholder="0"
               autoFocus
-              className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+              className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
             />
           </div>
           <button onClick={handleAddEntry} className="w-full rounded-xl bg-green py-3.5 font-semibold text-bg active:scale-95 transition-transform">

@@ -1,4 +1,5 @@
 import { Benefit, Category, Transaction, UserSettings } from '../types'
+import { DEFAULT_THEME } from './themes'
 
 export const DEFAULT_CATEGORIES: Category[] = [
   { id: 'alimentacao', name: 'Alimentação', icon: '🍔' },
@@ -20,7 +21,8 @@ export const DEFAULT_SETTINGS: UserSettings = {
   payDay: 5,
   otherIncomeSources: [],
   monthlyBudgetTotal: undefined,
-  mainGoalDescription: undefined
+  mainGoalDescription: undefined,
+  theme: DEFAULT_THEME
 }
 
 function isoDaysAgo(days: number): string {

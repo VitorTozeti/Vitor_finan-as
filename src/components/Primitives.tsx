@@ -19,7 +19,7 @@ export function ProgressBar({
     accent: 'bg-accent'
   }
   return (
-    <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden">
+    <div className="h-2 w-full rounded-full bg-line/5 overflow-hidden">
       <div
         className={`h-full rounded-full ${colors[tone]} transition-all duration-500 ease-out`}
         style={{ width: `${pct}%` }}
@@ -40,8 +40,8 @@ export function Card({
 }) {
   const base = 'rounded-2xl border shadow-soft p-5'
   const variants: Record<string, string> = {
-    default: 'bg-card border-white/5',
-    elevated: 'bg-card bg-card-sheen border-white/10',
+    default: 'bg-card border-line/5',
+    elevated: 'bg-card bg-card-sheen border-line/10',
     accent: 'bg-surface border-accent/25 shadow-glow-accent'
   }
   return <div className={`${base} ${variants[variant]} ${className}`}>{children}</div>
@@ -86,14 +86,14 @@ export function Badge({
       className={`relative rounded-2xl border p-4 transition-all ${
         unlocked
           ? 'bg-surface border-green/25 shadow-glow'
-          : 'bg-card border-white/5 opacity-70'
+          : 'bg-card border-line/5 opacity-70'
       }`}
     >
       {unlocked && <div className="absolute inset-0 rounded-2xl shimmer pointer-events-none" />}
       <div className="relative">
         <div
           className={`h-11 w-11 rounded-xl flex items-center justify-center text-2xl mb-2 ${
-            unlocked ? 'bg-green/15' : 'bg-white/5 grayscale'
+            unlocked ? 'bg-green/15' : 'bg-line/5 grayscale'
           }`}
         >
           {emoji}
@@ -123,7 +123,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center text-center py-14 px-6">
-      <div className="h-14 w-14 rounded-2xl bg-white/5 flex items-center justify-center mb-4 text-2xl">🌱</div>
+      <div className="h-14 w-14 rounded-2xl bg-line/5 flex items-center justify-center mb-4 text-2xl">🌱</div>
       <p className="font-semibold text-txt mb-1">{title}</p>
       {description && <p className="text-sm text-muted max-w-xs">{description}</p>}
       {actionLabel && onAction && (
@@ -161,13 +161,13 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 animate-fadeIn" onClick={onClose} />
-      <div className="relative w-full md:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl md:rounded-2xl bg-bg2 border border-white/10 p-5 animate-slideUp">
+      <div className="relative w-full md:max-w-md max-h-[90vh] overflow-y-auto rounded-t-2xl md:rounded-2xl bg-bg2 border border-line/10 p-5 animate-slideUp">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
             onClick={onClose}
             aria-label="Fechar"
-            className="h-8 w-8 flex items-center justify-center rounded-full bg-white/5 text-muted hover:text-txt"
+            className="h-8 w-8 flex items-center justify-center rounded-full bg-line/5 text-muted hover:text-txt"
           >
             <X size={16} />
           </button>
@@ -195,13 +195,13 @@ export function ConfirmDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-6">
       <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
-      <div className="relative w-full max-w-sm rounded-2xl bg-bg2 border border-white/10 p-5">
+      <div className="relative w-full max-w-sm rounded-2xl bg-bg2 border border-line/10 p-5">
         <p className="font-semibold mb-1">{title}</p>
         {description && <p className="text-sm text-muted mb-5">{description}</p>}
         <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 rounded-xl bg-white/5 py-2.5 text-sm font-medium text-txt"
+            className="flex-1 rounded-xl bg-line/5 py-2.5 text-sm font-medium text-txt"
           >
             Cancelar
           </button>
@@ -284,5 +284,5 @@ export function ToastHost() {
 }
 
 export function Skeleton({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse rounded-lg bg-white/5 ${className}`} />
+  return <div className={`animate-pulse rounded-lg bg-line/5 ${className}`} />
 }

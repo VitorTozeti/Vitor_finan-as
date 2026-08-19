@@ -12,6 +12,7 @@ import {
   UserSettings
 } from '../types'
 import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from '../data/defaults'
+import { isValidTheme, DEFAULT_THEME } from '../data/themes'
 
 // Validates and migrates an unknown blob (from localStorage or an imported
 // backup file) into a well-formed AppState. Invalid rows inside otherwise
@@ -20,7 +21,7 @@ import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from '../data/defaults'
 // history. Missing arrays introduced by newer schema versions (e.g.
 // recurringRules) default to empty so old backups keep working.
 
-export const CURRENT_SCHEMA_VERSION = 3
+export const CURRENT_SCHEMA_VERSION = 4
 
 export interface ValidationSuccess {
   ok: true
@@ -52,7 +53,9 @@ function sanitizeSettings(raw: unknown, warnings: string[]): UserSettings {
       typeof raw.payDay === 'number' && raw.payDay >= 1 && raw.payDay <= 31 ? raw.payDay : DEFAULT_SETTINGS.payDay,
     otherIncomeSources: Array.isArray(raw.otherIncomeSources) ? (raw.otherIncomeSources as UserSettings['otherIncomeSources']) : [],
     monthlyBudgetTotal: typeof raw.monthlyBudgetTotal === 'number' ? raw.monthlyBudgetTotal : undefined,
-    mainGoalDescription: typeof raw.mainGoalDescription === 'string' ? raw.mainGoalDescription : undefined
+    mainGoalDescription: typeof raw.mainGoalDescription === 'string' ? raw.mainGoalDescription : undefined,
+    // Schema v4 — default to the house theme when missing or unknown.
+    theme: isValidTheme(raw.theme as string | undefined) ? (raw.theme as string) : DEFAULT_THEME
   }
 }
 

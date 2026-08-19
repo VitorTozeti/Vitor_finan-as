@@ -50,9 +50,9 @@ export default function TransactionList({
                       onEdit(t)
                     }
                   }}
-                  className="w-full flex items-center gap-3 rounded-xl bg-card border border-white/5 px-4 py-3 text-left active:scale-[0.99] transition-transform cursor-pointer"
+                  className="w-full flex items-center gap-3 rounded-xl bg-card border border-line/5 px-4 py-3 text-left active:scale-[0.99] transition-transform cursor-pointer"
                 >
-                  <div className="h-10 w-10 shrink-0 rounded-full bg-white/5 flex items-center justify-center text-lg">
+                  <div className="h-10 w-10 shrink-0 rounded-full bg-line/5 flex items-center justify-center text-lg">
                     {cat?.icon ?? '📦'}
                   </div>
                   <div className="min-w-0 flex-1">

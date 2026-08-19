@@ -3,7 +3,8 @@ import Header from '../components/Header'
 import { Card, pushToast } from '../components/Primitives'
 import { useStore } from '../store/useStore'
 import { formatCurrency } from '../utils/finance'
-import { parseStatement, ParsedStatementTx, DateFormatHint } from '../utils/statementImport'
+import { parseStatement, parseStatementLines, ParsedStatementTx, DateFormatHint } from '../utils/statementImport'
+import { extractPdfLines } from '../utils/pdfExtract'
 import { decodeFileText, TextEncodingChoice } from '../utils/decodeFile'
 import { isBankSyncConfigured } from '../services/bankApi'
 import {
@@ -27,21 +28,34 @@ export default function ConnectBank() {
   const [warnings, setWarnings] = useState<string[]>([])
   const [fileName, setFileName] = useState<string | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [format, setFormat] = useState<'OFX' | 'CSV' | null>(null)
+  const [format, setFormat] = useState<'OFX' | 'CSV' | 'PDF' | null>(null)
   const [encoding, setEncoding] = useState<TextEncodingChoice>('auto')
   const [dateFormat, setDateFormat] = useState<DateFormatHint>('auto')
+  const [parsing, setParsing] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   async function runParse(file: File, enc: TextEncodingChoice, fmt: DateFormatHint) {
-    const text = await decodeFileText(file, enc)
-    const result = parseStatement(text, file.name, state.categories, { dateFormat: fmt })
-    setRows(result.transactions)
-    setWarnings(result.warnings)
-    setFormat(result.format)
-    if (result.transactions.length > 0) {
-      pushToast(`${result.transactions.length} lançamento(s) lidos do arquivo`)
-    } else {
-      pushToast('Nenhum lançamento reconhecido', 'error')
+    setParsing(true)
+    try {
+      const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf'
+      const result = isPdf
+        ? parseStatementLines(await extractPdfLines(file), state.categories)
+        : parseStatement(await decodeFileText(file, enc), file.name, state.categories, { dateFormat: fmt })
+      setRows(result.transactions)
+      setWarnings(result.warnings)
+      setFormat(result.format)
+      if (result.transactions.length > 0) {
+        pushToast(`${result.transactions.length} lançamento(s) lidos do arquivo`)
+      } else {
+        pushToast('Nenhum lançamento reconhecido', 'error')
+      }
+    } catch {
+      setRows([])
+      setWarnings(['Não foi possível ler este arquivo. Confira se ele não está protegido por senha e tente novamente.'])
+      setFormat(null)
+      pushToast('Falha ao ler o arquivo', 'error')
+    } finally {
+      setParsing(false)
     }
   }
 
@@ -122,7 +136,7 @@ export default function ConnectBank() {
           <button
             onClick={() => setTab('import')}
             className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
-              tab === 'import' ? 'bg-green text-bg' : 'bg-white/5 text-muted'
+              tab === 'import' ? 'bg-green text-bg' : 'bg-line/5 text-muted'
             }`}
           >
             Importar extrato
@@ -130,7 +144,7 @@ export default function ConnectBank() {
           <button
             onClick={() => setTab('sync')}
             className={`rounded-xl py-2.5 text-sm font-semibold transition-colors ${
-              tab === 'sync' ? 'bg-green text-bg' : 'bg-white/5 text-muted'
+              tab === 'sync' ? 'bg-green text-bg' : 'bg-line/5 text-muted'
             }`}
           >
             Open Finance
@@ -156,20 +170,25 @@ export default function ConnectBank() {
             <Card>
               <p className="text-sm font-medium mb-1">Como fazer</p>
               <ol className="text-xs text-muted space-y-1.5 mb-4 list-decimal list-inside">
-                <li>No app do seu banco, exporte o extrato como <span className="text-txt font-medium">OFX</span> ou <span className="text-txt font-medium">CSV</span>.</li>
+                <li>No app/site do seu banco, baixe o extrato como <span className="text-txt font-medium">PDF</span>, <span className="text-txt font-medium">OFX</span> ou <span className="text-txt font-medium">CSV</span>.</li>
                 <li>Selecione o arquivo abaixo.</li>
                 <li>Confira os lançamentos e importe.</li>
               </ol>
+              <p className="text-[11px] text-muted mb-3">
+                O extrato do <span className="text-txt font-medium">Itaú</span> em PDF funciona aqui — a leitura de PDF é
+                automática, mas confira sempre os lançamentos antes de importar.
+              </p>
               <button
                 onClick={() => fileRef.current?.click()}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-green py-3 text-sm font-semibold text-bg"
+                disabled={parsing}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-green py-3 text-sm font-semibold text-bg disabled:opacity-60"
               >
-                <Upload size={16} /> Selecionar arquivo (.ofx / .csv)
+                <Upload size={16} /> {parsing ? 'Lendo arquivo…' : 'Selecionar arquivo (.pdf / .ofx / .csv)'}
               </button>
               <input
                 ref={fileRef}
                 type="file"
-                accept=".ofx,.csv,.txt,text/csv,application/x-ofx"
+                accept=".pdf,.ofx,.csv,.txt,text/csv,application/x-ofx,application/pdf"
                 onChange={handleFile}
                 className="hidden"
               />
@@ -180,7 +199,7 @@ export default function ConnectBank() {
               )}
             </Card>
 
-            {selectedFile && (
+            {selectedFile && format !== 'PDF' && (
               <Card>
                 <p className="text-sm font-medium mb-3">Se algo saiu errado</p>
                 <div className="space-y-3">
@@ -191,7 +210,7 @@ export default function ConnectBank() {
                     <select
                       value={encoding}
                       onChange={e => handleEncodingChange(e.target.value as TextEncodingChoice)}
-                      className="w-full rounded-lg bg-bg border border-white/10 px-2 py-1.5 text-xs outline-none focus:border-green"
+                      className="w-full rounded-lg bg-bg border border-line/10 px-2 py-1.5 text-xs outline-none focus:border-green"
                     >
                       <option value="auto">Automático</option>
                       <option value="utf-8">UTF-8</option>
@@ -206,7 +225,7 @@ export default function ConnectBank() {
                       <select
                         value={dateFormat}
                         onChange={e => handleDateFormatChange(e.target.value as DateFormatHint)}
-                        className="w-full rounded-lg bg-bg border border-white/10 px-2 py-1.5 text-xs outline-none focus:border-green"
+                        className="w-full rounded-lg bg-bg border border-line/10 px-2 py-1.5 text-xs outline-none focus:border-green"
                       >
                         <option value="auto">Automático</option>
                         <option value="dmy">DD/MM/AAAA (Brasil)</option>
@@ -285,7 +304,7 @@ export default function ConnectBank() {
                       <select
                         value={r.categoryId}
                         onChange={e => setRowCategory(idx, e.target.value)}
-                        className="mt-2 w-full rounded-lg bg-bg border border-white/10 px-2 py-1.5 text-xs outline-none focus:border-green"
+                        className="mt-2 w-full rounded-lg bg-bg border border-line/10 px-2 py-1.5 text-xs outline-none focus:border-green"
                       >
                         {state.categories.map(c => (
                           <option key={c.id} value={c.id}>

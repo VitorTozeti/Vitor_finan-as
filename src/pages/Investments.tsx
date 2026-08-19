@@ -1,12 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import { Card, EmptyState, Skeleton } from '../components/Primitives'
+import { AXIS_TICK, GRID_STROKE, useChartTheme } from '../components/ChartKit'
 import { useStore } from '../store/useStore'
 import { formatCurrency, formatSignedPct } from '../utils/finance'
-import { Search, TrendingUp, TrendingDown, ChevronRight, RefreshCw } from 'lucide-react'
-import { getQuote, getQuotesBatch, QuoteResult } from '../services/marketApi'
+import { TrendingUp, TrendingDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { getQuote, getMultipleQuotes, getQuotesBatch, QuoteResult } from '../services/marketApi'
 import { WATCHLIST } from '../data/investing'
+import TickerAutocomplete from '../components/TickerAutocomplete'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+
+const BENCHMARK = 'BOVA11'
 
 const SUGGESTIONS = ['PETR4', 'VALE3', 'ITUB4', 'BOVA11', 'MXRF11', 'WEGE3']
 
@@ -38,23 +43,22 @@ export default function Investments() {
       <div className="px-5 space-y-4">
         <Card>
           <p className="text-sm font-medium mb-3">Pesquisar ativo</p>
-          <div className="relative">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted" />
-            <input
-              value={query}
-              onChange={e => setQuery(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === 'Enter' && handleSearch(query)}
-              placeholder="Ex: PETR4, VALE3, BOVA11..."
-              className="w-full rounded-xl bg-bg border border-white/10 pl-10 pr-4 py-2.5 text-sm outline-none focus:border-green"
-            />
-          </div>
+          <TickerAutocomplete
+            value={query}
+            onPick={entry => handleSearch(entry.ticker)}
+            onTextChange={setQuery}
+            onSubmit={t => handleSearch(t)}
+          />
+          <p className="text-[11px] text-muted mt-1.5">
+            Busque por código ou nome. Pressione Enter para abrir a análise.
+          </p>
           {error && <p className="text-xs text-danger mt-2">{error}</p>}
           <div className="flex flex-wrap gap-2 mt-3">
             {SUGGESTIONS.map(s => (
               <button
                 key={s}
                 onClick={() => handleSearch(s)}
-                className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted hover:text-green hover:border-green"
+                className="rounded-full border border-line/10 px-3 py-1.5 text-xs font-medium text-muted hover:text-green hover:border-green"
               >
                 {s}
               </button>
@@ -69,6 +73,8 @@ export default function Investments() {
         </Card>
 
         <RecommendedAssets onOpen={t => navigate(`/investimentos/${t}`)} />
+
+        {state.portfolio.length > 0 && <PortfolioVsIndex />}
 
         <Card>
           <div className="flex items-center justify-between mb-3">
@@ -174,12 +180,12 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
               <button
                 key={item.ticker}
                 onClick={() => onOpen(item.ticker)}
-                className="w-full flex items-center gap-3 rounded-xl bg-bg border border-white/5 p-3 text-left hover:border-white/15 transition-colors"
+                className="w-full flex items-center gap-3 rounded-xl bg-bg border border-line/5 p-3 text-left hover:border-line/15 transition-colors"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold">{item.ticker}</p>
-                    <span className="rounded-md bg-white/5 px-1.5 py-0.5 text-[10px] text-muted">{item.kind}</span>
+                    <span className="rounded-md bg-line/5 px-1.5 py-0.5 text-[10px] text-muted">{item.kind}</span>
                   </div>
                   <p className="text-[11px] text-muted truncate">{item.note}</p>
                 </div>
@@ -196,6 +202,100 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
               </button>
             )
           })}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/** Compares the user's portfolio performance against the Ibovespa (BOVA11),
+ * both rebased to 100 at the start of the shared window so the lines are
+ * comparable regardless of absolute price. */
+function PortfolioVsIndex() {
+  const { state } = useStore()
+  const chart = useChartTheme()
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [holdings, setHoldings] = useState<QuoteResult[]>([])
+  const [bench, setBench] = useState<QuoteResult | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setStatus('loading')
+    Promise.all([getMultipleQuotes(state.portfolio.map(p => p.ticker)), getQuote(BENCHMARK)])
+      .then(([hs, b]) => {
+        if (!alive) return
+        setHoldings(hs)
+        setBench(b)
+        setStatus(hs.some(h => h.history?.length) && b?.history?.length ? 'ready' : 'error')
+      })
+      .catch(() => alive && setStatus('error'))
+    return () => {
+      alive = false
+    }
+  }, [state.portfolio])
+
+  const series = useMemo(() => {
+    if (!bench?.history?.length) return []
+    const byTicker: Record<string, QuoteResult> = {}
+    for (const h of holdings) byTicker[h.ticker] = h
+    // Portfolio market value over the benchmark's timeline.
+    const timeline = bench.history.map(x => x.date)
+    const values = timeline.map(date => {
+      let value = 0
+      for (const p of state.portfolio) {
+        const hist = byTicker[p.ticker]?.history
+        let close = p.avgPrice
+        if (hist && hist.length) {
+          let picked = hist[0].close
+          for (const point of hist) {
+            if (point.date <= date) picked = point.close
+            else break
+          }
+          close = picked
+        }
+        value += p.quantity * close
+      }
+      return value
+    })
+    const base = values.find(v => v > 0) ?? 1
+    const benchBase = bench.history[0].close || 1
+    return timeline.map((date, i) => ({
+      date,
+      Carteira: Math.round((values[i] / base) * 1000) / 10,
+      Ibovespa: Math.round((bench.history![i].close / benchBase) * 1000) / 10
+    }))
+  }, [holdings, bench, state.portfolio])
+
+  return (
+    <Card>
+      <p className="text-sm font-medium mb-1">Carteira vs. Ibovespa</p>
+      <p className="text-xs text-muted mb-3">Desempenho relativo nos últimos meses (base 100).</p>
+      {status === 'loading' && <Skeleton className="h-52 w-full" />}
+      {status === 'error' && (
+        <p className="text-xs text-muted">Sem histórico suficiente para comparar agora.</p>
+      )}
+      {status === 'ready' && series.length > 1 && (
+        <div className="h-52">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={series}>
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
+              <XAxis
+                dataKey="date"
+                tick={AXIS_TICK}
+                axisLine={false}
+                tickLine={false}
+                minTickGap={40}
+                tickFormatter={(d: string) => d.slice(5)}
+              />
+              <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={38} domain={['auto', 'auto']} />
+              <Tooltip
+                formatter={(v: number, name: string) => [v.toFixed(1), name]}
+                contentStyle={{ background: chart.tooltipBg, border: `1px solid ${chart.tooltipBorder}`, borderRadius: 12, fontSize: 12 }}
+              />
+              <Line type="monotone" dataKey="Carteira" stroke={chart.green} strokeWidth={2.5} dot={false} />
+              <Line type="monotone" dataKey="Ibovespa" stroke={chart.axisFill} strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       )}
     </Card>

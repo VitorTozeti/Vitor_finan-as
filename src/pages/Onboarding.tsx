@@ -40,7 +40,7 @@ export default function Onboarding() {
                 inputMode="decimal"
                 value={income}
                 onChange={e => setIncome(e.target.value)}
-                className="w-full rounded-xl bg-card border border-white/10 px-4 py-3 text-lg font-semibold outline-none focus:border-green"
+                className="w-full rounded-xl bg-card border border-line/10 px-4 py-3 text-lg font-semibold outline-none focus:border-green"
               />
             </div>
             <button
@@ -60,7 +60,7 @@ export default function Onboarding() {
                 inputMode="numeric"
                 value={payDay}
                 onChange={e => setPayDay(e.target.value)}
-                className="w-full rounded-xl bg-card border border-white/10 px-4 py-3 text-lg font-semibold outline-none focus:border-green"
+                className="w-full rounded-xl bg-card border border-line/10 px-4 py-3 text-lg font-semibold outline-none focus:border-green"
               />
               <p className="text-[11px] text-muted mt-1.5">
                 Se cair em fim de semana ou feriado, ajustamos para o dia útil anterior.
@@ -82,7 +82,7 @@ export default function Onboarding() {
                 value={goal}
                 onChange={e => setGoal(e.target.value)}
                 placeholder="Ex: Guardar dinheiro, controlar gastos..."
-                className="w-full rounded-xl bg-card border border-white/10 px-4 py-3 text-sm outline-none focus:border-green"
+                className="w-full rounded-xl bg-card border border-line/10 px-4 py-3 text-sm outline-none focus:border-green"
               />
             </div>
             <button onClick={finish} className="w-full rounded-xl bg-green py-3.5 font-semibold text-bg">
@@ -93,7 +93,7 @@ export default function Onboarding() {
 
         <div className="flex justify-center gap-1.5 mt-6">
           {[0, 1, 2].map(i => (
-            <span key={i} className={`h-1.5 rounded-full transition-all ${i === step ? 'w-6 bg-green' : 'w-1.5 bg-white/10'}`} />
+            <span key={i} className={`h-1.5 rounded-full transition-all ${i === step ? 'w-6 bg-green' : 'w-1.5 bg-line/10'}`} />
           ))}
         </div>
       </div>

@@ -1,28 +1,92 @@
+import { useEffect, useState } from 'react'
 import { TooltipProps } from 'recharts'
 import { formatCurrency } from '../utils/finance'
 
-// Central chart palette so every page reads as one system.
-// Brand green + warm accent lead; the rest are tuned to sit on the dark surface.
-export const CHART_COLORS = [
-  '#1FD98A',
-  '#FFB454',
-  '#4E9AF1',
-  '#B98CE0',
-  '#5CD0B3',
-  '#E37EC1',
-  '#F5A623',
-  '#7A8CFF',
-  '#13B571',
-  '#FF5A66'
-]
+// ─────────────────────────────────────────────────────────────────────────
+// Theme-aware chart colors.
+//
+// Recharts paints SVG via `fill`/`stroke` *attributes*, which don't resolve
+// CSS `var()`. So instead of hardcoding hex we read the theme tokens (defined
+// in src/index.css) at runtime with getComputedStyle and hand Recharts concrete
+// `rgb(...)` strings. `useChartTheme()` recomputes whenever the <html>
+// data-theme attribute changes, so charts re-skin instantly on theme switch.
+// ─────────────────────────────────────────────────────────────────────────
 
-// Semantic single colors shared with the design tokens.
+function readVar(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v ? `rgb(${v})` : fallback
+}
+
+function readVarAlpha(name: string, alpha: number, fallback: string): string {
+  if (typeof window === 'undefined') return fallback
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v ? `rgb(${v} / ${alpha})` : fallback
+}
+
+export interface ChartTheme {
+  colors: string[]
+  green: string
+  accent: string
+  danger: string
+  axisFill: string
+  grid: string
+  tooltipBg: string
+  tooltipBorder: string
+}
+
+function computeChartTheme(): ChartTheme {
+  return {
+    colors: [
+      readVar('--c-green', '#1FD98A'),
+      readVar('--c-accent', '#FFB454'),
+      '#4E9AF1',
+      '#B98CE0',
+      '#5CD0B3',
+      '#E37EC1',
+      '#F5A623',
+      '#7A8CFF',
+      readVar('--c-green-dark', '#13B571'),
+      readVar('--c-danger', '#FF5A66')
+    ],
+    green: readVar('--c-green', '#1FD98A'),
+    accent: readVar('--c-accent', '#FFB454'),
+    danger: readVar('--c-danger', '#FF5A66'),
+    axisFill: readVar('--c-muted', '#889389'),
+    grid: readVarAlpha('--c-line', 0.08, 'rgba(255,255,255,0.06)'),
+    tooltipBg: readVar('--c-card', '#161D19'),
+    tooltipBorder: readVarAlpha('--c-line', 0.12, 'rgba(255,255,255,0.1)')
+  }
+}
+
+/** Reactive chart theme — recomputes on theme (data-theme) changes. */
+export function useChartTheme(): ChartTheme {
+  const [theme, setTheme] = useState<ChartTheme>(computeChartTheme)
+  useEffect(() => {
+    const update = () => setTheme(computeChartTheme())
+    update()
+    const observer = new MutationObserver(update)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+  return theme
+}
+
+// Static fallbacks (default theme) kept for any non-reactive usage.
+export const CHART_COLORS = [
+  '#1FD98A', '#FFB454', '#4E9AF1', '#B98CE0', '#5CD0B3',
+  '#E37EC1', '#F5A623', '#7A8CFF', '#13B571', '#FF5A66'
+]
 export const BRAND_GREEN = '#1FD98A'
 export const BRAND_ACCENT = '#FFB454'
 
-export const AXIS_TICK = { fontSize: 11, fill: '#889389' } as const
-export const GRID_STROKE = 'rgba(255,255,255,0.06)'
+// Neutral mid-gray that stays legible on both light and dark surfaces — used
+// as a non-reactive fallback where var() can't resolve (SVG attributes).
+export const AXIS_TICK = { fontSize: 11, fill: '#8A9690' } as const
+export const GRID_STROKE = 'rgba(128,138,132,0.18)'
 
+// Static tooltip style (default theme) — prefer useChartTheme().tooltipBg/Border
+// for theme-reactive charts.
 export const TOOLTIP_STYLE = {
   background: '#161D19',
   border: '1px solid rgba(255,255,255,0.1)',
@@ -31,11 +95,19 @@ export const TOOLTIP_STYLE = {
   boxShadow: '0 8px 24px rgba(0,0,0,0.45)'
 } as const
 
-/** Shared money tooltip with a small color swatch per series. */
+/** Shared money tooltip with a small color swatch per series. Reads theme
+ * tokens at render so it matches the active palette. */
 export function MoneyTooltip({ active, payload, label }: TooltipProps<number, string>) {
   if (!active || !payload || payload.length === 0) return null
+  const style = {
+    background: readVar('--c-card', '#161D19'),
+    border: `1px solid ${readVarAlpha('--c-line', 0.12, 'rgba(255,255,255,0.1)')}`,
+    borderRadius: 12,
+    fontSize: 12,
+    boxShadow: '0 8px 24px rgba(0,0,0,0.45)'
+  }
   return (
-    <div style={TOOLTIP_STYLE} className="px-3 py-2">
+    <div style={style} className="px-3 py-2">
       {label != null && <p className="text-[11px] text-muted mb-1">{label}</p>}
       {payload.map((entry, i) => (
         <div key={i} className="flex items-center gap-2 text-xs">
@@ -74,7 +146,7 @@ export function SegmentedControl<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="inline-flex rounded-xl bg-bg border border-white/10 p-0.5 gap-0.5">
+    <div className="inline-flex rounded-xl bg-bg border border-line/10 p-0.5 gap-0.5">
       {options.map(o => (
         <button
           key={o.value}

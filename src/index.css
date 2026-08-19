@@ -2,6 +2,113 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ────────────────────────────────────────────────────────────────────────
+   Theme tokens. Every color the app uses is a CSS custom property expressed
+   as "R G B" channels (so Tailwind can apply /opacity). The default palette
+   lives on :root; each [data-theme="..."] block overrides it. Switching the
+   attribute on <html> re-skins the whole app instantly. Keep in sync with the
+   THEMES list in src/data/themes.ts.
+   ──────────────────────────────────────────────────────────────────────── */
+:root,
+:root[data-theme='verde-noturno'] {
+  --c-bg: 10 14 12;
+  --c-bg2: 17 24 20;
+  --c-card: 22 29 25;
+  --c-surface: 28 37 31;
+  --c-green: 34 214 138;
+  --c-green-dark: 19 181 113;
+  --c-accent: 255 180 84;
+  --c-accent-dark: 245 158 46;
+  --c-txt: 243 246 244;
+  --c-muted: 138 150 140;
+  --c-danger: 255 90 102;
+  --c-warn: 255 200 87;
+  --c-line: 255 255 255; /* used at low opacity for hairlines */
+  --c-sheen: 255 255 255;
+  --grad-a: 34 214 138;
+  --grad-b: 255 180 84;
+}
+
+/* Esmeralda sobre grafite — verde mais frio, base cinza-azulada. */
+:root[data-theme='esmeralda-grafite'] {
+  --c-bg: 15 18 21;
+  --c-bg2: 22 26 30;
+  --c-card: 27 32 37;
+  --c-surface: 34 40 46;
+  --c-green: 16 209 158;
+  --c-green-dark: 8 168 128;
+  --c-accent: 120 190 255;
+  --c-accent-dark: 74 154 241;
+  --c-txt: 238 242 245;
+  --c-muted: 148 158 168;
+  --c-danger: 255 106 116;
+  --c-warn: 255 205 100;
+  --c-line: 255 255 255;
+  --c-sheen: 255 255 255;
+  --grad-a: 16 209 158;
+  --grad-b: 120 190 255;
+}
+
+/* Roxo meia-noite — base violeta profunda, acento âmbar. */
+:root[data-theme='roxo-meia-noite'] {
+  --c-bg: 15 12 22;
+  --c-bg2: 22 18 33;
+  --c-card: 29 23 43;
+  --c-surface: 38 30 56;
+  --c-green: 132 122 255;
+  --c-green-dark: 106 96 230;
+  --c-accent: 255 176 118;
+  --c-accent-dark: 240 148 84;
+  --c-txt: 242 240 250;
+  --c-muted: 156 148 178;
+  --c-danger: 255 96 128;
+  --c-warn: 255 200 110;
+  --c-line: 255 255 255;
+  --c-sheen: 255 255 255;
+  --grad-a: 132 122 255;
+  --grad-b: 255 176 118;
+}
+
+/* Azul oceano — base marinho, acento turquesa. */
+:root[data-theme='azul-oceano'] {
+  --c-bg: 8 15 24;
+  --c-bg2: 14 23 36;
+  --c-card: 19 30 46;
+  --c-surface: 26 40 60;
+  --c-green: 56 189 248;
+  --c-green-dark: 20 155 220;
+  --c-accent: 94 234 212;
+  --c-accent-dark: 45 200 178;
+  --c-txt: 236 243 250;
+  --c-muted: 140 158 180;
+  --c-danger: 255 106 116;
+  --c-warn: 255 206 112;
+  --c-line: 255 255 255;
+  --c-sheen: 255 255 255;
+  --grad-a: 56 189 248;
+  --grad-b: 94 234 212;
+}
+
+/* Claro menta — tema claro, superfícies quase brancas com verde vivo. */
+:root[data-theme='claro-menta'] {
+  --c-bg: 244 247 245;
+  --c-bg2: 236 241 238;
+  --c-card: 255 255 255;
+  --c-surface: 247 250 248;
+  --c-green: 17 168 111;
+  --c-green-dark: 12 138 90;
+  --c-accent: 214 124 20;
+  --c-accent-dark: 180 100 8;
+  --c-txt: 20 30 25;
+  --c-muted: 96 112 102;
+  --c-danger: 214 45 62;
+  --c-warn: 190 130 10;
+  --c-line: 10 30 20; /* dark hairlines on light surfaces */
+  --c-sheen: 10 30 20;
+  --grad-a: 17 168 111;
+  --grad-b: 214 124 20;
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }
@@ -13,11 +120,13 @@ body {
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
+  color: rgb(var(--c-txt));
   background:
-    radial-gradient(1200px 600px at 100% -10%, rgba(31, 217, 138, 0.06), transparent 60%),
-    radial-gradient(900px 500px at -10% 0%, rgba(255, 180, 84, 0.05), transparent 55%),
-    #0b0f0d;
+    radial-gradient(1200px 600px at 100% -10%, rgb(var(--grad-a) / 0.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 0%, rgb(var(--grad-b) / 0.06), transparent 55%),
+    rgb(var(--c-bg));
   background-attachment: fixed;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Numbers and display headings use the Space Grotesk face with tabular figures. */
@@ -124,6 +233,6 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid #1fd98a;
+  outline: 2px solid rgb(var(--c-green));
   outline-offset: 2px;
 }

@@ -26,7 +26,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
       return (
         <div className="min-h-screen flex items-center justify-center bg-bg text-txt px-6">
           <div className="max-w-sm text-center">
-            <div className="h-14 w-14 mx-auto rounded-2xl bg-white/5 flex items-center justify-center mb-4 text-2xl">
+            <div className="h-14 w-14 mx-auto rounded-2xl bg-line/5 flex items-center justify-center mb-4 text-2xl">
               ⚠️
             </div>
             <p className="font-semibold mb-1">Algo deu errado</p>

@@ -6,7 +6,8 @@ import { exportAsJson, exportTransactionsAsCsv, parseImportedJson } from '../uti
 import { parseAmountInput } from '../utils/finance'
 import CategoryManager from '../components/CategoryManager'
 import RecurringRulesManager from '../components/RecurringRulesManager'
-import { Download, Upload, Trash2 } from 'lucide-react'
+import { Download, Upload, Trash2, Check, Palette } from 'lucide-react'
+import { THEMES, DEFAULT_THEME } from '../data/themes'
 
 export default function Settings() {
   const { state, updateSettings, clearDemoData, resetAll, importData } = useStore()
@@ -48,11 +49,60 @@ export default function Settings() {
   }
 
   const hasDemoData = state.transactions.some(t => t.id.startsWith('demo-'))
+  const activeTheme = state.settings.theme ?? DEFAULT_THEME
 
   return (
     <div className="pb-28">
       <Header title="Configurações" subtitle="Personalize seu GreenFinance" />
       <div className="px-5 space-y-4">
+        <Card>
+          <div className="flex items-center gap-2 mb-1">
+            <Palette size={16} className="text-green" />
+            <p className="text-sm font-medium">Tema visual</p>
+          </div>
+          <p className="text-xs text-muted mb-4">Escolha a paleta de cores do app. Muda na hora.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {THEMES.map(t => {
+              const selected = t.id === activeTheme
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    updateSettings({ theme: t.id })
+                    pushToast(`Tema "${t.label}" aplicado`)
+                  }}
+                  className={`relative flex items-center gap-3 rounded-xl border p-3 text-left transition-all active:scale-[0.98] ${
+                    selected ? 'border-green shadow-glow bg-surface' : 'border-line/10 bg-bg hover:border-line/20'
+                  }`}
+                >
+                  {/* Live palette preview */}
+                  <div
+                    className="h-11 w-11 shrink-0 rounded-lg border border-line/10 overflow-hidden grid grid-cols-2 grid-rows-2"
+                    style={{ background: t.swatch.bg }}
+                  >
+                    <span style={{ background: t.swatch.green }} />
+                    <span style={{ background: t.swatch.accent }} />
+                    <span style={{ background: t.swatch.txt }} />
+                    <span style={{ background: t.swatch.bg }} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold flex items-center gap-1.5">
+                      {t.label}
+                      {t.light && <span className="text-[9px] uppercase tracking-wide text-muted">claro</span>}
+                    </p>
+                    <p className="text-[11px] text-muted leading-snug">{t.description}</p>
+                  </div>
+                  {selected && (
+                    <span className="absolute top-2 right-2 h-5 w-5 rounded-full bg-green flex items-center justify-center">
+                      <Check size={12} className="text-bg" />
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </Card>
+
         <Card>
           <p className="text-sm font-medium mb-3">Renda mensal</p>
           <div className="space-y-3">
@@ -62,7 +112,7 @@ export default function Settings() {
                 inputMode="decimal"
                 value={income}
                 onChange={e => setIncome(e.target.value)}
-                className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
               />
             </div>
             <div>
@@ -71,7 +121,7 @@ export default function Settings() {
                 inputMode="numeric"
                 value={payDay}
                 onChange={e => setPayDay(e.target.value)}
-                className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
               />
               <p className="text-[11px] text-muted mt-1.5">
                 Se cair em fim de semana ou feriado, consideramos o dia útil anterior.
@@ -95,20 +145,20 @@ export default function Settings() {
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => exportAsJson(state)}
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-white/5 py-2.5 text-xs font-medium"
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-line/5 py-2.5 text-xs font-medium"
             >
               <Download size={14} /> Exportar JSON
             </button>
             <button
               onClick={() => exportTransactionsAsCsv(state.transactions, state.categories)}
-              className="flex items-center justify-center gap-1.5 rounded-xl bg-white/5 py-2.5 text-xs font-medium"
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-line/5 py-2.5 text-xs font-medium"
             >
               <Download size={14} /> Exportar CSV
             </button>
           </div>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="w-full mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-white/5 py-2.5 text-xs font-medium"
+            className="w-full mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-line/5 py-2.5 text-xs font-medium"
           >
             <Upload size={14} /> Importar backup (JSON)
           </button>
@@ -123,7 +173,7 @@ export default function Settings() {
             </p>
             <button
               onClick={() => setConfirmClearDemo(true)}
-              className="w-full rounded-xl bg-white/5 py-2.5 text-xs font-medium"
+              className="w-full rounded-xl bg-line/5 py-2.5 text-xs font-medium"
             >
               Limpar dados de demonstração
             </button>

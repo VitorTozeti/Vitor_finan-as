@@ -78,7 +78,7 @@ export default function TransactionForm({
   return (
     <Modal open={open} onClose={onClose} title={editing ? 'Editar transação' : 'Adicionar gasto'}>
       <div className="space-y-4">
-        <div className="flex rounded-xl bg-white/5 p-1">
+        <div className="flex rounded-xl bg-line/5 p-1">
           {(['expense', 'income'] as const).map(t => (
             <button
               key={t}
@@ -100,7 +100,7 @@ export default function TransactionForm({
             value={amount}
             onChange={e => setAmount(e.target.value)}
             placeholder="R$ 0,00"
-            className="w-full rounded-xl bg-bg border border-white/10 px-4 py-3 text-xl font-semibold outline-none focus:border-green"
+            className="w-full rounded-xl bg-bg border border-line/10 px-4 py-3 text-xl font-semibold outline-none focus:border-green"
           />
         </div>
 
@@ -110,7 +110,7 @@ export default function TransactionForm({
             value={description}
             onChange={e => setDescription(e.target.value)}
             placeholder="Ex: Mercado, Uber..."
-            className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+            className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
           />
         </div>
 
@@ -130,7 +130,7 @@ export default function TransactionForm({
                 value={newCategoryName}
                 onChange={e => setNewCategoryName(e.target.value)}
                 placeholder="Nome da categoria"
-                className="flex-1 rounded-xl bg-bg border border-white/10 px-3 py-2 text-sm outline-none focus:border-green"
+                className="flex-1 rounded-xl bg-bg border border-line/10 px-3 py-2 text-sm outline-none focus:border-green"
               />
               <button
                 onClick={() => {
@@ -154,7 +154,7 @@ export default function TransactionForm({
                 className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium border transition-colors ${
                   categoryId === c.id
                     ? 'bg-green/15 border-green text-green'
-                    : 'bg-bg border-white/10 text-muted'
+                    : 'bg-bg border-line/10 text-muted'
                 }`}
               >
                 <span>{c.icon}</span>
@@ -171,7 +171,7 @@ export default function TransactionForm({
               type="date"
               value={date}
               onChange={e => setDate(e.target.value)}
-              className="w-full rounded-xl bg-bg border border-white/10 px-3 py-2.5 text-sm outline-none focus:border-green"
+              className="w-full rounded-xl bg-bg border border-line/10 px-3 py-2.5 text-sm outline-none focus:border-green"
             />
           </div>
           <div>
@@ -179,7 +179,7 @@ export default function TransactionForm({
             <select
               value={paymentMethod}
               onChange={e => setPaymentMethod(e.target.value as PaymentMethod)}
-              className="w-full rounded-xl bg-bg border border-white/10 px-3 py-2.5 text-sm outline-none focus:border-green"
+              className="w-full rounded-xl bg-bg border border-line/10 px-3 py-2.5 text-sm outline-none focus:border-green"
             >
               {PAYMENT_METHODS.map(m => (
                 <option key={m} value={m}>
@@ -195,7 +195,7 @@ export default function TransactionForm({
           <input
             value={note}
             onChange={e => setNote(e.target.value)}
-            className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+            className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
           />
         </div>
 

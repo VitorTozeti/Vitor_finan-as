@@ -1,34 +1,37 @@
 /** @type {import('tailwindcss').Config} */
+
+// Color tokens are driven by CSS custom properties (see src/index.css) so the
+// whole palette can be swapped at runtime by setting `data-theme` on <html>.
+// Each token is exposed as `rgb(var(--c-x) / <alpha-value>)` so Tailwind's
+// opacity modifiers (e.g. bg-card/60, text-green/80) keep working.
+const withVar = (name) => `rgb(var(${name}) / <alpha-value>)`
+
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        // Base surfaces — a softer, warmer near-black with a faint green undertone
-        // (less harsh than the old pure #080A09).
-        bg: '#0B0F0D',
-        bg2: '#111815',
-        card: '#161D19',
-        // Elevated surface for accents / highlighted cards.
-        surface: '#1B231E',
-        // Brand: a more organic, slightly less neon green + a warm amber accent
-        // that carries the "human" warmth across CTAs and positive highlights.
+        bg: withVar('--c-bg'),
+        bg2: withVar('--c-bg2'),
+        card: withVar('--c-card'),
+        surface: withVar('--c-surface'),
         green: {
-          DEFAULT: '#1FD98A',
-          dark: '#13B571'
+          DEFAULT: withVar('--c-green'),
+          dark: withVar('--c-green-dark')
         },
         accent: {
-          DEFAULT: '#FFB454',
-          dark: '#F59E2E'
+          DEFAULT: withVar('--c-accent'),
+          dark: withVar('--c-accent-dark')
         },
-        txt: '#F3F6F4',
-        muted: '#889389',
-        danger: '#FF5A66',
-        warn: '#FFC857'
+        txt: withVar('--c-txt'),
+        muted: withVar('--c-muted'),
+        danger: withVar('--c-danger'),
+        warn: withVar('--c-warn'),
+        // Hairline border tint that adapts to light/dark themes.
+        line: 'rgb(var(--c-line) / <alpha-value>)'
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        // Space Grotesk (already loaded) as the display face for numbers / big titles.
         display: ['"Space Grotesk"', 'Inter', 'system-ui', 'sans-serif']
       },
       borderRadius: {
@@ -38,12 +41,12 @@ export default {
       },
       boxShadow: {
         soft: '0 8px 24px rgba(0,0,0,0.35)',
-        glow: '0 0 0 1px rgba(31,217,138,0.25), 0 8px 30px rgba(31,217,138,0.18)',
-        'glow-accent': '0 0 0 1px rgba(255,180,84,0.25), 0 8px 30px rgba(255,180,84,0.16)'
+        glow: '0 0 0 1px rgb(var(--c-green) / 0.25), 0 8px 30px rgb(var(--c-green) / 0.18)',
+        'glow-accent': '0 0 0 1px rgb(var(--c-accent) / 0.25), 0 8px 30px rgb(var(--c-accent) / 0.16)'
       },
       backgroundImage: {
-        'brand-fade': 'linear-gradient(135deg, rgba(31,217,138,0.16), rgba(255,180,84,0.08))',
-        'card-sheen': 'linear-gradient(160deg, rgba(255,255,255,0.04), rgba(255,255,255,0) 60%)'
+        'brand-fade': 'linear-gradient(135deg, rgb(var(--c-green) / 0.16), rgb(var(--c-accent) / 0.08))',
+        'card-sheen': 'linear-gradient(160deg, rgb(var(--c-sheen) / 0.05), rgb(var(--c-sheen) / 0) 60%)'
       }
     }
   },

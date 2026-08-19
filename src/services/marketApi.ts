@@ -39,6 +39,24 @@ function withToken(url: string): string {
   return `${url}${sep}token=${TOKEN}`
 }
 
+// Live ticker search across every B3 symbol via brapi's free /available
+// endpoint (accepts a `search` term). Returns a list of matching symbols.
+// Used as a fallback so the app covers all listed tickers, not just the
+// curated local catalog. Fails soft (empty list) when offline/rate-limited.
+export async function searchAvailable(query: string): Promise<string[]> {
+  const q = query.trim()
+  if (!q) return []
+  try {
+    const res = await fetch(withToken(`${BASE_URL}/available?search=${encodeURIComponent(q)}`))
+    if (!res.ok) return []
+    const data = await res.json()
+    const stocks = Array.isArray(data?.stocks) ? (data.stocks as string[]) : []
+    return stocks
+  } catch {
+    return []
+  }
+}
+
 export async function getQuote(ticker: string): Promise<QuoteResult | null> {
   try {
     const url = withToken(`${BASE_URL}/quote/${encodeURIComponent(ticker.toUpperCase())}?range=6mo&interval=1d`)

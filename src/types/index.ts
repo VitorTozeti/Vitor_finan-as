@@ -67,6 +67,8 @@ export interface UserSettings {
   otherIncomeSources: IncomeSource[]
   monthlyBudgetTotal?: number
   mainGoalDescription?: string
+  /** Visual theme id — see src/data/themes.ts. Defaults to 'verde-noturno'. */
+  theme?: string
 }
 
 export type BenefitType = 'VA' | 'VR' | 'Transporte' | 'Saúde' | 'PLR' | 'Outro'
@@ -84,6 +86,8 @@ export interface Benefit {
   resetDay?: number
   currentBalance?: number
   note?: string
+  /** Card operator / provider (Alelo, VR, Caju, Flash, Sodexo…). */
+  provider?: string
 }
 
 export type CashbackUnit = 'R$' | 'pontos' | 'milhas'

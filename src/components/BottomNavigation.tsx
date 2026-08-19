@@ -12,7 +12,7 @@ const items = [
 export default function BottomNavigation() {
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 border-t border-white/5 bg-bg2/95 backdrop-blur-lg pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed bottom-0 left-0 right-0 z-40 border-t border-line/5 bg-bg2/95 backdrop-blur-lg pb-[env(safe-area-inset-bottom)] md:hidden"
       aria-label="Navegação principal"
     >
       <ul className="flex items-stretch justify-between px-1">

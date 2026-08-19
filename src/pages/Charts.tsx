@@ -4,15 +4,13 @@ import { Card, EmptyState } from '../components/Primitives'
 import { useStore } from '../store/useStore'
 import { monthKey, monthLabel, formatCurrency, formatCurrencyShort, formatSignedPct } from '../utils/finance'
 import {
-  CHART_COLORS,
   AXIS_TICK,
   GRID_STROKE,
   MoneyTooltip,
   AreaGradient,
   SegmentedControl,
   StatTile,
-  TOOLTIP_STYLE,
-  BRAND_GREEN
+  useChartTheme
 } from '../components/ChartKit'
 import {
   PieChart,
@@ -54,6 +52,7 @@ function windowStart(period: Period): Date {
 
 export default function Charts() {
   const { state } = useStore()
+  const chart = useChartTheme()
   const [period, setPeriod] = useState<Period>('month')
 
   const start = useMemo(() => windowStart(period), [period])
@@ -188,12 +187,12 @@ export default function Charts() {
                   <PieChart>
                     <Pie data={byCategory} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={2}>
                       {byCategory.map((_, i) => (
-                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} stroke="none" />
+                        <Cell key={i} fill={chart.colors[i % chart.colors.length]} stroke="none" />
                       ))}
                     </Pie>
                     <Tooltip
                       formatter={(v: number, n: string) => [formatCurrency(v), n]}
-                      contentStyle={TOOLTIP_STYLE}
+                      contentStyle={{ background: chart.tooltipBg, border: `1px solid ${chart.tooltipBorder}`, borderRadius: 12, fontSize: 12 }}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -201,7 +200,7 @@ export default function Charts() {
               <div className="space-y-1.5 mt-2">
                 {byCategory.slice(0, 6).map((c, i) => (
                   <div key={c.name} className="flex items-center gap-2 text-xs">
-                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                    <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: chart.colors[i % chart.colors.length] }} />
                     <span className="text-muted truncate">{c.name}</span>
                     <span className="ml-auto text-muted">{c.pct.toFixed(0)}%</span>
                     <span className="font-medium text-txt w-20 text-right">{formatCurrency(c.value)}</span>
@@ -219,13 +218,13 @@ export default function Charts() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={dailySeries}>
                   <defs>
-                    <AreaGradient id="grad-daily" color={BRAND_GREEN} />
+                    <AreaGradient id="grad-daily" color={chart.green} />
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
                   <XAxis dataKey="day" tick={AXIS_TICK} axisLine={false} tickLine={false} />
                   <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} tickFormatter={formatCurrencyShort} />
                   <Tooltip content={<MoneyTooltip />} />
-                  <Area type="monotone" dataKey="total" name="Acumulado" stroke={BRAND_GREEN} strokeWidth={2.5} fill="url(#grad-daily)" />
+                  <Area type="monotone" dataKey="total" name="Acumulado" stroke={chart.green} strokeWidth={2.5} fill="url(#grad-daily)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -242,8 +241,8 @@ export default function Charts() {
                 <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} tickFormatter={formatCurrencyShort} />
                 <Tooltip content={<MoneyTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="Entradas" fill={BRAND_GREEN} radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Gastos" fill="#FF5A66" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Entradas" fill={chart.green} radius={[6, 6, 0, 0]} />
+                <Bar dataKey="Gastos" fill={chart.danger} radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -4,7 +4,7 @@ import Header from '../components/Header'
 import { Card } from '../components/Primitives'
 import { formatCurrency, formatCurrencyShort } from '../utils/finance'
 import { PROFILE_PRESETS, presetById, RiskProfile } from '../data/investing'
-import { AXIS_TICK, GRID_STROKE, MoneyTooltip, AreaGradient, StatTile, BRAND_GREEN } from '../components/ChartKit'
+import { AXIS_TICK, GRID_STROKE, MoneyTooltip, AreaGradient, StatTile, useChartTheme } from '../components/ChartKit'
 import {
   AreaChart,
   Area,
@@ -22,6 +22,7 @@ function num(v: string): number {
 
 export default function Simulator() {
   const navigate = useNavigate()
+  const chart = useChartTheme()
   const [profile, setProfile] = useState<RiskProfile>('moderado')
   const [initial, setInitial] = useState('500')
   const [monthly, setMonthly] = useState('200')
@@ -95,7 +96,7 @@ export default function Simulator() {
                 key={p.id}
                 onClick={() => applyProfile(p.id)}
                 className={`rounded-xl border p-3 text-center transition-colors ${
-                  profile === p.id ? 'border-green bg-green/10' : 'border-white/10 hover:border-white/20'
+                  profile === p.id ? 'border-green bg-green/10' : 'border-line/10 hover:border-line/20'
                 }`}
               >
                 <div className="text-xl mb-1">{p.emoji}</div>
@@ -116,7 +117,7 @@ export default function Simulator() {
                   inputMode="decimal"
                   value={initial}
                   onChange={e => setInitial(e.target.value)}
-                  className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                  className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
                 />
               </div>
               <div>
@@ -125,7 +126,7 @@ export default function Simulator() {
                   inputMode="decimal"
                   value={monthly}
                   onChange={e => setMonthly(e.target.value)}
-                  className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                  className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
                 />
               </div>
             </div>
@@ -157,7 +158,7 @@ export default function Simulator() {
                   inputMode="decimal"
                   value={rateYear}
                   onChange={e => setRateYear(e.target.value)}
-                  className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                  className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
                 />
               </div>
               <div>
@@ -167,12 +168,12 @@ export default function Simulator() {
                   value={goal}
                   onChange={e => setGoal(e.target.value)}
                   placeholder="Ex: 50000"
-                  className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                  className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl bg-bg border border-white/10 px-4 py-3">
+            <div className="flex items-center justify-between rounded-xl bg-bg border border-line/10 px-4 py-3">
               <div className="min-w-0 pr-3">
                 <p className="text-xs font-medium">Mostrar em valor de hoje</p>
                 <p className="text-[10px] text-muted">Desconta a inflação para ver o poder de compra real.</p>
@@ -180,7 +181,7 @@ export default function Simulator() {
               <button
                 onClick={() => setRealValue(v => !v)}
                 aria-pressed={realValue}
-                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${realValue ? 'bg-green' : 'bg-white/15'}`}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${realValue ? 'bg-green' : 'bg-line/15'}`}
               >
                 <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${realValue ? 'left-[22px]' : 'left-0.5'}`} />
               </button>
@@ -192,7 +193,7 @@ export default function Simulator() {
                   inputMode="decimal"
                   value={inflation}
                   onChange={e => setInflation(e.target.value)}
-                  className="w-full rounded-xl bg-bg border border-white/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                  className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
                 />
               </div>
             )}
@@ -227,7 +228,7 @@ export default function Simulator() {
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={sim.points}>
                 <defs>
-                  <AreaGradient id="grad-patr" color={BRAND_GREEN} />
+                  <AreaGradient id="grad-patr" color={chart.green} />
                   <AreaGradient id="grad-inv" color="#889389" />
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} />
@@ -241,7 +242,7 @@ export default function Simulator() {
                 <YAxis tick={AXIS_TICK} axisLine={false} tickLine={false} width={52} tickFormatter={formatCurrencyShort} />
                 <Tooltip content={<MoneyTooltip />} />
                 <Area type="monotone" dataKey="investido" name="Investido" stroke="#889389" strokeWidth={1.5} fill="url(#grad-inv)" strokeDasharray="4 4" dot={false} />
-                <Area type="monotone" dataKey="patrimonio" name="Patrimônio" stroke={BRAND_GREEN} strokeWidth={2.5} fill="url(#grad-patr)" dot={false} />
+                <Area type="monotone" dataKey="patrimonio" name="Patrimônio" stroke={chart.green} strokeWidth={2.5} fill="url(#grad-patr)" dot={false} />
                 {num(goal) > 0 && (
                   <ReferenceLine y={num(goal)} stroke="#FFC857" strokeDasharray="5 4" label={{ value: 'Meta', fill: '#FFC857', fontSize: 10, position: 'insideTopRight' }} />
                 )}
@@ -258,7 +259,7 @@ export default function Simulator() {
               <button
                 key={t}
                 onClick={() => navigate(`/investimentos/${t}`)}
-                className="rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-muted hover:text-green hover:border-green"
+                className="rounded-full border border-line/10 px-3 py-1.5 text-xs font-medium text-muted hover:text-green hover:border-green"
               >
                 {t}
               </button>
