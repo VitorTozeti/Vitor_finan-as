@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Header from '../components/Header'
 import { Card, EmptyState, Skeleton } from '../components/Primitives'
@@ -133,6 +133,46 @@ const SUBTYPE_FILTERS: { value: string; label: string }[] = [
 ]
 
 const PAGE_SIZE = 40
+
+/** Scrollable list wrapper that shows soft gradient shadows at the top/bottom
+ * edges only while there's more content in that direction — a clearer scroll
+ * affordance than a plain overflow-y-auto box with no visual cue. */
+function ScrollShadowList({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [atTop, setAtTop] = useState(true)
+  const [atBottom, setAtBottom] = useState(true)
+
+  function update() {
+    const el = ref.current
+    if (!el) return
+    setAtTop(el.scrollTop <= 2)
+    setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - 2)
+  }
+
+  useEffect(() => {
+    update()
+  })
+
+  return (
+    <div className="relative">
+      <div
+        ref={ref}
+        onScroll={update}
+        className="scrollbar-thin space-y-1.5 max-h-[28rem] overflow-y-auto pr-0.5 scroll-smooth"
+      >
+        {children}
+      </div>
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-6 rounded-t-xl bg-gradient-to-b from-card to-transparent transition-opacity duration-150"
+        style={{ opacity: atTop ? 0 : 1 }}
+      />
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-xl bg-gradient-to-t from-card to-transparent transition-opacity duration-150"
+        style={{ opacity: atBottom ? 0 : 1 }}
+      />
+    </div>
+  )
+}
 
 /** Broad market view backed by brapi's /quote/list (hundreds of tickers with
  * sector/type), so it's not limited to a handful of curated names. Falls back
@@ -282,10 +322,10 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
             ))}
           </div>
           {allSectors.length > 0 && (
-            <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+            <div className="scrollbar-thin fade-edge-x flex gap-1.5 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-proximity">
               <button
                 onClick={() => setSector('')}
-                className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                className={`shrink-0 snap-start rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                   sector === '' ? 'border-accent text-accent' : 'border-line/10 text-muted hover:text-txt'
                 }`}
               >
@@ -295,7 +335,7 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
                 <button
                   key={s}
                   onClick={() => setSector(s)}
-                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  className={`shrink-0 snap-start rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                     sector === s ? 'border-accent text-accent' : 'border-line/10 text-muted hover:text-txt'
                   }`}
                 >
@@ -361,7 +401,7 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
 
       {status === 'ready' && !degraded && (
         <>
-          <div className="space-y-1.5 max-h-[28rem] overflow-y-auto">
+          <ScrollShadowList>
             {filteredItems.length === 0 && (
               <p className="text-xs text-muted px-1 py-2">Nenhum ativo encontrado para esse filtro.</p>
             )}
@@ -393,7 +433,7 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
                 </button>
               )
             })}
-          </div>
+          </ScrollShadowList>
           {hasMore && !search && (
             <button
               onClick={loadMore}
