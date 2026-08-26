@@ -67,8 +67,12 @@ export interface UserSettings {
   otherIncomeSources: IncomeSource[]
   monthlyBudgetTotal?: number
   mainGoalDescription?: string
-  /** Visual theme id — see src/data/themes.ts. Defaults to 'verde-noturno'. */
+  /** Visual theme id — see src/data/themes.ts. Defaults to 'verde-noturno'.
+   * `'custom'` means the palette below is used instead of a static theme. */
   theme?: string
+  /** User-picked base colors (hex) for the 'custom' theme — see
+   * buildCustomPalette in src/data/themes.ts. */
+  customPalette?: { bg: string; primary: string; accent: string }
 }
 
 export type BenefitType = 'VA' | 'VR' | 'Transporte' | 'Saúde' | 'PLR' | 'Outro'

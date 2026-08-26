@@ -12,7 +12,7 @@ import {
   UserSettings
 } from '../types'
 import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS } from '../data/defaults'
-import { isValidTheme, DEFAULT_THEME } from '../data/themes'
+import { isValidTheme, DEFAULT_THEME, CUSTOM_THEME_ID } from '../data/themes'
 
 // Validates and migrates an unknown blob (from localStorage or an imported
 // backup file) into a well-formed AppState. Invalid rows inside otherwise
@@ -21,7 +21,13 @@ import { isValidTheme, DEFAULT_THEME } from '../data/themes'
 // history. Missing arrays introduced by newer schema versions (e.g.
 // recurringRules) default to empty so old backups keep working.
 
-export const CURRENT_SCHEMA_VERSION = 4
+export const CURRENT_SCHEMA_VERSION = 5
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/
+
+function isHexColor(v: unknown): v is string {
+  return typeof v === 'string' && HEX_COLOR_RE.test(v)
+}
 
 export interface ValidationSuccess {
   ok: true
@@ -55,7 +61,20 @@ function sanitizeSettings(raw: unknown, warnings: string[]): UserSettings {
     monthlyBudgetTotal: typeof raw.monthlyBudgetTotal === 'number' ? raw.monthlyBudgetTotal : undefined,
     mainGoalDescription: typeof raw.mainGoalDescription === 'string' ? raw.mainGoalDescription : undefined,
     // Schema v4 — default to the house theme when missing or unknown.
-    theme: isValidTheme(raw.theme as string | undefined) ? (raw.theme as string) : DEFAULT_THEME
+    // Schema v5 — 'custom' is also valid when a well-formed customPalette accompanies it.
+    theme: (() => {
+      const t = raw.theme as string | undefined
+      if (t === CUSTOM_THEME_ID && isObject(raw.customPalette)) return CUSTOM_THEME_ID
+      return isValidTheme(t) ? (t as string) : DEFAULT_THEME
+    })(),
+    customPalette: (() => {
+      const p = raw.customPalette
+      if (!isObject(p)) return undefined
+      if (isHexColor(p.bg) && isHexColor(p.primary) && isHexColor(p.accent)) {
+        return { bg: p.bg, primary: p.primary, accent: p.accent }
+      }
+      return undefined
+    })()
   }
 }
 

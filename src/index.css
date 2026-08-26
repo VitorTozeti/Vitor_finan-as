@@ -109,6 +109,86 @@
   --grad-b: 214 124 20;
 }
 
+/* Vinho & ouro — bordô profundo com dourado e rosé. */
+:root[data-theme='vinho-ouro'] {
+  --c-bg: 26 14 18;
+  --c-bg2: 36 19 24;
+  --c-card: 46 25 32;
+  --c-surface: 58 31 40;
+  --c-green: 212 167 44;
+  --c-green-dark: 179 138 29;
+  --c-accent: 232 130 154;
+  --c-accent-dark: 211 96 124;
+  --c-txt: 245 237 233;
+  --c-muted: 169 143 146;
+  --c-danger: 255 90 102;
+  --c-warn: 255 200 87;
+  --c-line: 255 255 255;
+  --c-sheen: 255 255 255;
+  --grad-a: 212 167 44;
+  --grad-b: 232 130 154;
+}
+
+/* Grafite mono — quase preto neutro, visual minimalista. */
+:root[data-theme='grafite-mono'] {
+  --c-bg: 12 13 14;
+  --c-bg2: 23 24 26;
+  --c-card: 31 33 35;
+  --c-surface: 41 43 46;
+  --c-green: 111 191 149;
+  --c-green-dark: 79 153 115;
+  --c-accent: 201 205 209;
+  --c-accent-dark: 166 171 176;
+  --c-txt: 240 241 242;
+  --c-muted: 138 142 146;
+  --c-danger: 255 107 117;
+  --c-warn: 224 196 104;
+  --c-line: 255 255 255;
+  --c-sheen: 255 255 255;
+  --grad-a: 111 191 149;
+  --grad-b: 201 205 209;
+}
+
+/* Coral poente — grafite-azulado com coral e âmbar queimado. */
+:root[data-theme='coral-poente'] {
+  --c-bg: 18 24 31;
+  --c-bg2: 25 33 42;
+  --c-card: 32 42 53;
+  --c-surface: 40 53 68;
+  --c-green: 255 122 92;
+  --c-green-dark: 232 90 59;
+  --c-accent: 242 180 64;
+  --c-accent-dark: 216 154 38;
+  --c-txt: 241 244 248;
+  --c-muted: 144 160 178;
+  --c-danger: 255 90 102;
+  --c-warn: 255 200 87;
+  --c-line: 255 255 255;
+  --c-sheen: 255 255 255;
+  --grad-a: 255 122 92;
+  --grad-b: 242 180 64;
+}
+
+/* Claro areia — tema claro quente, oliva com terracota. */
+:root[data-theme='claro-areia'] {
+  --c-bg: 246 241 231;
+  --c-bg2: 239 231 214;
+  --c-card: 255 255 255;
+  --c-surface: 249 244 234;
+  --c-green: 122 139 79;
+  --c-green-dark: 97 111 62;
+  --c-accent: 193 101 58;
+  --c-accent-dark: 158 79 44;
+  --c-txt: 36 30 20;
+  --c-muted: 122 115 98;
+  --c-danger: 196 66 60;
+  --c-warn: 181 134 15;
+  --c-line: 30 26 18;
+  --c-sheen: 30 26 18;
+  --grad-a: 122 139 79;
+  --grad-b: 193 101 58;
+}
+
 * {
   -webkit-tap-highlight-color: transparent;
 }

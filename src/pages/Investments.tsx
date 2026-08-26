@@ -5,7 +5,7 @@ import { Card, EmptyState, Skeleton } from '../components/Primitives'
 import { AXIS_TICK, GRID_STROKE, SegmentedControl, useChartTheme } from '../components/ChartKit'
 import { useStore } from '../store/useStore'
 import { formatCurrency, formatSignedPct } from '../utils/finance'
-import { TrendingUp, TrendingDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { TrendingUp, TrendingDown, ChevronRight, RefreshCw, Search, X } from 'lucide-react'
 import { getQuote, getMultipleQuotes, getQuotesBatch, listQuotes, MarketListItem, QuoteResult } from '../services/marketApi'
 import { WATCHLIST } from '../data/investing'
 import TickerAutocomplete from '../components/TickerAutocomplete'
@@ -132,6 +132,8 @@ const SUBTYPE_FILTERS: { value: string; label: string }[] = [
   { value: 'etf', label: 'ETFs' }
 ]
 
+const PAGE_SIZE = 40
+
 /** Broad market view backed by brapi's /quote/list (hundreds of tickers with
  * sector/type), so it's not limited to a handful of curated names. Falls back
  * to the small curated WATCHLIST when the listing call comes back empty
@@ -139,24 +141,34 @@ const SUBTYPE_FILTERS: { value: string; label: string }[] = [
 function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
   const [items, setItems] = useState<MarketListItem[]>([])
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
   const [degraded, setDegraded] = useState(false)
   const [fallback, setFallback] = useState<Record<string, QuoteResult>>({})
   const [sort, setSort] = useState<SortMode>('volume')
   const [subType, setSubType] = useState('')
   const [sector, setSector] = useState('')
-  // Captured once from the first unfiltered load so the sector chip list
-  // stays stable (and complete) once the user narrows down to one sector.
+  const [search, setSearch] = useState('')
+  // Fetched once, independent of the active filters, so the sector chip list
+  // stays complete even after the user narrows down to one sector.
   const [allSectors, setAllSectors] = useState<string[]>([])
+
+  function queryOpts(pageNum: number) {
+    return {
+      sortBy: sort === 'volume' ? ('volume' as const) : ('change' as const),
+      sortOrder: sort === 'change_asc' ? ('asc' as const) : ('desc' as const),
+      limit: PAGE_SIZE,
+      page: pageNum,
+      subType: subType || undefined,
+      sector: sector || undefined
+    }
+  }
 
   async function load() {
     setStatus('loading')
-    const results = await listQuotes({
-      sortBy: sort === 'volume' ? 'volume' : 'change',
-      sortOrder: sort === 'change_asc' ? 'asc' : 'desc',
-      limit: 40,
-      subType: subType || undefined,
-      sector: sector || undefined
-    })
+    setPage(1)
+    const results = await listQuotes(queryOpts(1))
     if (results.length === 0) {
       // No token / offline / rate-limited — fall back to the small curated list.
       const fb = await getQuotesBatch(WATCHLIST.map(w => w.ticker))
@@ -173,18 +185,44 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
     }
     setDegraded(false)
     setItems(results)
-    if (!sector) {
-      const set = new Set<string>()
-      for (const it of results) if (it.sector) set.add(it.sector)
-      setAllSectors(Array.from(set).sort())
-    }
+    setHasMore(results.length >= PAGE_SIZE)
     setStatus('ready')
+  }
+
+  async function loadMore() {
+    setLoadingMore(true)
+    const next = page + 1
+    const results = await listQuotes(queryOpts(next))
+    setLoadingMore(false)
+    if (results.length === 0) {
+      setHasMore(false)
+      return
+    }
+    setPage(next)
+    setItems(prev => [...prev, ...results])
+    setHasMore(results.length >= PAGE_SIZE)
   }
 
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sort, subType, sector])
+
+  // Sector taxonomy fetched once, independent of the active sort/type/sector
+  // filters, so switching sectors never shrinks the chip list.
+  useEffect(() => {
+    listQuotes({ limit: 100, sortBy: 'market_cap_basic', sortOrder: 'desc' }).then(results => {
+      const set = new Set<string>()
+      for (const it of results) if (it.sector) set.add(it.sector)
+      if (set.size > 0) setAllSectors(Array.from(set).sort())
+    })
+  }, [])
+
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toUpperCase()
+    if (!q) return items
+    return items.filter(it => it.ticker.toUpperCase().includes(q) || it.name.toUpperCase().includes(q))
+  }, [items, search])
 
   const fallbackOrdered = [...WATCHLIST].sort((a, b) => {
     const ca = fallback[a.ticker]?.changePercent ?? -Infinity
@@ -210,6 +248,25 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
 
       {!degraded && (
         <div className="space-y-2 mb-3">
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted pointer-events-none" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Filtrar por nome ou código na lista abaixo"
+              className="w-full rounded-lg bg-bg border border-line/10 pl-8 pr-8 py-2 text-xs outline-none focus:border-green"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Limpar filtro"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted hover:text-txt"
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
           <SegmentedControl options={SORT_OPTIONS} value={sort} onChange={setSort} />
           <div className="flex flex-wrap gap-1.5">
             {SUBTYPE_FILTERS.map(f => (
@@ -225,10 +282,10 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
             ))}
           </div>
           {allSectors.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
               <button
                 onClick={() => setSector('')}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                   sector === '' ? 'border-accent text-accent' : 'border-line/10 text-muted hover:text-txt'
                 }`}
               >
@@ -238,7 +295,7 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
                 <button
                   key={s}
                   onClick={() => setSector(s)}
-                  className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                  className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                     sector === s ? 'border-accent text-accent' : 'border-line/10 text-muted hover:text-txt'
                   }`}
                 >
@@ -303,37 +360,50 @@ function RecommendedAssets({ onOpen }: { onOpen: (ticker: string) => void }) {
       )}
 
       {status === 'ready' && !degraded && (
-        <div className="space-y-1.5 max-h-[28rem] overflow-y-auto">
-          {items.length === 0 && <p className="text-xs text-muted px-1 py-2">Nenhum ativo encontrado para esse filtro.</p>}
-          {items.map(item => {
-            const positive = item.changePercent >= 0
-            return (
-              <button
-                key={item.ticker}
-                onClick={() => onOpen(item.ticker)}
-                className="w-full flex items-center gap-3 rounded-xl bg-bg border border-line/5 p-3 text-left hover:border-line/15 transition-colors"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold">{item.ticker}</p>
-                    {item.sector && (
-                      <span className="rounded-md bg-line/5 px-1.5 py-0.5 text-[10px] text-muted truncate">{item.sector}</span>
-                    )}
+        <>
+          <div className="space-y-1.5 max-h-[28rem] overflow-y-auto">
+            {filteredItems.length === 0 && (
+              <p className="text-xs text-muted px-1 py-2">Nenhum ativo encontrado para esse filtro.</p>
+            )}
+            {filteredItems.map(item => {
+              const positive = item.changePercent >= 0
+              return (
+                <button
+                  key={item.ticker}
+                  onClick={() => onOpen(item.ticker)}
+                  className="w-full flex items-center gap-3 rounded-xl bg-bg border border-line/5 p-3 text-left hover:border-line/15 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold">{item.ticker}</p>
+                      {item.sector && (
+                        <span className="rounded-md bg-line/5 px-1.5 py-0.5 text-[10px] text-muted truncate">{item.sector}</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted truncate">{item.name}</p>
                   </div>
-                  <p className="text-[11px] text-muted truncate">{item.name}</p>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-medium">{formatCurrency(item.price)}</p>
-                  <span className={`flex items-center justify-end gap-0.5 text-xs font-semibold ${positive ? 'text-green' : 'text-danger'}`}>
-                    {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                    {formatSignedPct(item.changePercent)}
-                  </span>
-                </div>
-                <ChevronRight size={16} className="text-muted shrink-0" />
-              </button>
-            )
-          })}
-        </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-medium">{formatCurrency(item.price)}</p>
+                    <span className={`flex items-center justify-end gap-0.5 text-xs font-semibold ${positive ? 'text-green' : 'text-danger'}`}>
+                      {positive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                      {formatSignedPct(item.changePercent)}
+                    </span>
+                  </div>
+                  <ChevronRight size={16} className="text-muted shrink-0" />
+                </button>
+              )
+            })}
+          </div>
+          {hasMore && !search && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full mt-2 rounded-xl bg-line/5 py-2.5 text-xs font-medium text-muted hover:text-txt disabled:opacity-60"
+            >
+              {loadingMore ? 'Carregando…' : 'Carregar mais'}
+            </button>
+          )}
+        </>
       )}
     </Card>
   )

@@ -137,6 +137,7 @@ interface StoreValue {
   updateCategory: (id: string, patch: Partial<Pick<Category, 'name' | 'icon'>>) => void
   deleteCategory: (id: string) => void
   setBudget: (categoryId: string, limit: number) => void
+  deleteBudget: (categoryId: string) => void
   addGoal: (goal: Omit<Goal, 'id'>) => void
   updateGoal: (id: string, patch: Partial<Goal>) => void
   deleteGoal: (id: string) => void
@@ -153,6 +154,7 @@ interface StoreValue {
   addCashbackProgram: (program: Omit<CashbackProgram, 'id' | 'entries'>) => void
   deleteCashbackProgram: (id: string) => void
   addCashbackEntry: (programId: string, entry: Omit<CashbackEntry, 'id'>) => void
+  deleteCashbackEntry: (programId: string, entryId: string) => void
   markAchievementsUnlocked: (ids: string[]) => void
   clearDemoData: () => void
   importData: (data: unknown) => void
@@ -273,6 +275,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     })
   }, [])
 
+  const deleteBudget = useCallback((categoryId: string) => {
+    setState(s => ({ ...s, budgets: s.budgets.filter(b => b.categoryId !== categoryId) }))
+  }, [])
+
   const addGoal = useCallback((goal: Omit<Goal, 'id'>) => {
     setState(s => ({ ...s, goals: [...s.goals, { ...goal, id: crypto.randomUUID() }] }))
   }, [])
@@ -345,6 +351,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     }))
   }, [])
 
+  const deleteCashbackEntry = useCallback((programId: string, entryId: string) => {
+    setState(s => ({
+      ...s,
+      cashbackPrograms: s.cashbackPrograms.map(p =>
+        p.id === programId ? { ...p, entries: p.entries.filter(e => e.id !== entryId) } : p
+      )
+    }))
+  }, [])
+
   const markAchievementsUnlocked = useCallback((ids: string[]) => {
     if (ids.length === 0) return
     setState(s => {
@@ -412,6 +427,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     updateCategory,
     deleteCategory,
     setBudget,
+    deleteBudget,
     addGoal,
     updateGoal,
     deleteGoal,
@@ -428,6 +444,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     addCashbackProgram,
     deleteCashbackProgram,
     addCashbackEntry,
+    deleteCashbackEntry,
     markAchievementsUnlocked,
     clearDemoData,
     importData,

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { StoreProvider, useStore } from './store/useStore'
-import { applyTheme } from './data/themes'
+import { applyTheme, applyCustomPalette, clearCustomPalette, buildCustomPalette, CUSTOM_THEME_ID } from './data/themes'
 import BottomNavigation from './components/BottomNavigation'
 import Sidebar from './components/Sidebar'
 import { ToastHost } from './components/Primitives'
@@ -27,7 +27,12 @@ function AppShell() {
   // Keep the document theme in sync with the user's setting.
   useEffect(() => {
     applyTheme(state.settings.theme)
-  }, [state.settings.theme])
+    if (state.settings.theme === CUSTOM_THEME_ID && state.settings.customPalette) {
+      applyCustomPalette(buildCustomPalette(state.settings.customPalette))
+    } else {
+      clearCustomPalette()
+    }
+  }, [state.settings.theme, state.settings.customPalette])
 
   if (!state.settings.onboarded) {
     return <Onboarding />

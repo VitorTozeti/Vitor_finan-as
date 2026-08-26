@@ -13,7 +13,7 @@ import {
 } from '../utils/benefits'
 import { getMultipleQuotes } from '../services/marketApi'
 import { Benefit, BenefitType, BenefitFrequency, CashbackUnit } from '../types'
-import { Plus, Sparkles, Wallet, Trash2, Pencil, CalendarClock } from 'lucide-react'
+import { Plus, Sparkles, Wallet, Trash2, Pencil, CalendarClock, ChevronDown, X } from 'lucide-react'
 
 // Common Brazilian benefit-card operators, offered as quick suggestions.
 const PROVIDERS = ['Alelo', 'VR', 'Ticket', 'Sodexo/Pluxee', 'Caju', 'Flash', 'Ben', 'iFood Benefícios']
@@ -29,6 +29,16 @@ const BENEFIT_TYPES: { value: BenefitType; label: string; emoji: string }[] = [
 
 const typeMeta = (t: BenefitType) => BENEFIT_TYPES.find(b => b.value === t) ?? BENEFIT_TYPES[5]
 
+/** Days until the next credit/reset day of month (wraps to next month if
+ * already past this month's day). */
+function daysUntilReset(resetDay: number): number {
+  const now = new Date()
+  const today = now.getDate()
+  if (resetDay >= today) return resetDay - today
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  return daysInMonth - today + resetDay
+}
+
 type Tab = 'empresa' | 'cashback' | 'conquistas'
 
 export default function Benefits() {
@@ -40,6 +50,7 @@ export default function Benefits() {
     addCashbackProgram,
     deleteCashbackProgram,
     addCashbackEntry,
+    deleteCashbackEntry,
     markAchievementsUnlocked
   } = useStore()
 
@@ -121,6 +132,7 @@ export default function Benefits() {
             onAddProgram={addCashbackProgram}
             onDeleteProgram={deleteCashbackProgram}
             onAddEntry={addCashbackEntry}
+            onDeleteEntry={deleteCashbackEntry}
           />
         )}
         {tab === 'conquistas' && (
@@ -164,6 +176,7 @@ function CompanyBenefits({
   const [balance, setBalance] = useState('')
   const [provider, setProvider] = useState('')
   const [resetDay, setResetDay] = useState('')
+  const [note, setNote] = useState('')
 
   function resetForm() {
     setName('')
@@ -173,6 +186,7 @@ function CompanyBenefits({
     setBalance('')
     setProvider('')
     setResetDay('')
+    setNote('')
     setEditingId(null)
   }
 
@@ -190,6 +204,7 @@ function CompanyBenefits({
     setBalance(b.currentBalance != null ? String(b.currentBalance) : '')
     setProvider(b.provider ?? '')
     setResetDay(b.resetDay != null ? String(b.resetDay) : '')
+    setNote(b.note ?? '')
     setOpen(true)
   }
 
@@ -208,7 +223,8 @@ function CompanyBenefits({
       frequency,
       currentBalance: isNaN(bal) ? undefined : bal,
       provider: provider.trim() || undefined,
-      resetDay: day >= 1 && day <= 31 ? day : undefined
+      resetDay: day >= 1 && day <= 31 ? day : undefined,
+      note: note.trim() || undefined
     }
     if (editingId) {
       onUpdate(editingId, payload)
@@ -262,8 +278,14 @@ function CompanyBenefits({
                   {b.resetDay != null && (
                     <p className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
                       <CalendarClock size={11} /> crédito todo dia {b.resetDay}
+                      {daysUntilReset(b.resetDay) <= 3 && (
+                        <span className="text-accent font-medium">
+                          · reseta {daysUntilReset(b.resetDay) === 0 ? 'hoje' : `em ${daysUntilReset(b.resetDay)}d`}
+                        </span>
+                      )}
                     </p>
                   )}
+                  {b.note && <p className="text-[11px] text-muted mt-0.5 italic truncate">{b.note}</p>}
                 </div>
                 <button onClick={() => openEdit(b)} className="text-muted hover:text-txt p-1" aria-label="Editar">
                   <Pencil size={15} />
@@ -374,6 +396,15 @@ function CompanyBenefits({
             </div>
           </div>
           <div>
+            <label className="block text-xs font-medium text-muted mb-1.5">Observação (opcional)</label>
+            <input
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Ex: usar até o fim do mês"
+              className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+            />
+          </div>
+          <div>
             <label className="block text-xs font-medium text-muted mb-1.5">Frequência</label>
             <div className="inline-flex w-full rounded-xl bg-bg border border-line/10 p-0.5 gap-0.5">
               {(['mensal', 'anual', 'único'] as BenefitFrequency[]).map(f => (
@@ -415,11 +446,13 @@ function CompanyBenefits({
 function CashbackSection({
   onAddProgram,
   onDeleteProgram,
-  onAddEntry
+  onAddEntry,
+  onDeleteEntry
 }: {
   onAddProgram: ReturnType<typeof useStore>['addCashbackProgram']
   onDeleteProgram: (id: string) => void
   onAddEntry: ReturnType<typeof useStore>['addCashbackEntry']
+  onDeleteEntry: ReturnType<typeof useStore>['deleteCashbackEntry']
 }) {
   const { state } = useStore()
   const [open, setOpen] = useState(false)
@@ -428,6 +461,7 @@ function CashbackSection({
   const [entryFor, setEntryFor] = useState<string | null>(null)
   const [entryAmount, setEntryAmount] = useState('')
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   function handleAddProgram() {
     if (!name.trim()) {
@@ -484,6 +518,15 @@ function CashbackSection({
                 >
                   + Crédito
                 </button>
+                {p.entries.length > 0 && (
+                  <button
+                    onClick={() => setExpanded(expanded === p.id ? null : p.id)}
+                    className="text-muted hover:text-txt p-1"
+                    aria-label="Ver créditos"
+                  >
+                    <ChevronDown size={16} className={`transition-transform ${expanded === p.id ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
                 <button
                   onClick={() => setPendingDelete(p.id)}
                   className="text-muted hover:text-danger p-1"
@@ -492,6 +535,29 @@ function CashbackSection({
                   <Trash2 size={16} />
                 </button>
               </div>
+              {expanded === p.id && p.entries.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-line/5 space-y-1.5">
+                  {[...p.entries]
+                    .sort((a, b) => b.date.localeCompare(a.date))
+                    .map(e => (
+                      <div key={e.id} className="flex items-center justify-between text-xs">
+                        <span className="text-muted">{e.date.split('-').reverse().join('/')}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {p.unit === 'R$' ? formatCurrency(e.amount) : `${e.amount.toLocaleString('pt-BR')} ${p.unit}`}
+                          </span>
+                          <button
+                            onClick={() => onDeleteEntry(p.id, e.id)}
+                            className="text-muted hover:text-danger"
+                            aria-label="Remover crédito"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
             </Card>
           ))}
         </div>
