@@ -24,7 +24,7 @@ export function findTicker(ticker: string): TickerEntry | undefined {
 }
 
 /** Local, synchronous fuzzy search over symbol + company name. */
-export function searchLocal(query: string, limit = 8): TickerEntry[] {
+export function searchLocal(query: string, limit = 20): TickerEntry[] {
   const q = query.trim().toUpperCase()
   if (!q) return []
   const starts: TickerEntry[] = []
@@ -46,11 +46,10 @@ function guessKind(ticker: string): TickerKind {
 /** Local-first search that falls back to a live brapi lookup so any listed
  * ticker (not just the curated seed) can be found. Local hits are returned
  * immediately by the caller; this resolves the merged, deduped list. */
-export async function searchTickers(query: string, limit = 8): Promise<TickerEntry[]> {
+export async function searchTickers(query: string, limit = 20): Promise<TickerEntry[]> {
   const local = searchLocal(query, limit)
   const seen = new Set(local.map(t => t.ticker.toUpperCase()))
   const out = [...local]
-  if (out.length >= limit) return out
   try {
     const live = await searchAvailable(query)
     for (const sym of live) {

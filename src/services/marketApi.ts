@@ -85,6 +85,66 @@ export async function getQuote(ticker: string): Promise<QuoteResult | null> {
   }
 }
 
+export interface MarketListItem {
+  ticker: string
+  name: string
+  price: number
+  changePercent: number
+  volume?: number
+  marketCap?: number
+  sector?: string
+  type: 'stock' | 'fund' | 'bdr'
+  subType?: string
+}
+
+// Broad market listing via brapi's /quote/list — returns hundreds of tickers
+// at once (sector, type, change, volume, market cap included), so it can back
+// "show everything" views (top movers, sector filters) without one request per
+// ticker. Needs a brapi token for full coverage; fails soft (empty list) when
+// unavailable so callers can fall back to a smaller curated set.
+export async function listQuotes(opts: {
+  sortBy?: 'change' | 'volume' | 'market_cap_basic' | 'name'
+  sortOrder?: 'asc' | 'desc'
+  limit?: number
+  page?: number
+  sector?: string
+  type?: 'stock' | 'fund' | 'bdr'
+  subType?: string
+  search?: string
+} = {}): Promise<MarketListItem[]> {
+  try {
+    const params = new URLSearchParams()
+    if (opts.sortBy) params.set('sortBy', opts.sortBy)
+    if (opts.sortOrder) params.set('sortOrder', opts.sortOrder)
+    if (opts.limit) params.set('limit', String(opts.limit))
+    if (opts.page) params.set('page', String(opts.page))
+    if (opts.sector) params.set('sector', opts.sector)
+    if (opts.type) params.set('type', opts.type)
+    if (opts.subType) params.set('subType', opts.subType)
+    if (opts.search) params.set('search', opts.search)
+    const url = withToken(`${BASE_URL}/quote/list?${params.toString()}`)
+    const res = await fetch(url)
+    if (!res.ok) return []
+    const data = await res.json()
+    const stocks = Array.isArray(data?.stocks) ? data.stocks : []
+    return stocks
+      .filter((s: { stock?: string; close?: number }) => s.stock && typeof s.close === 'number')
+      .map((s: Record<string, unknown>) => ({
+        ticker: s.stock as string,
+        name: (s.name as string) || (s.stock as string),
+        price: s.close as number,
+        changePercent: (s.change as number) ?? 0,
+        volume: s.volume as number | undefined,
+        marketCap: s.market_cap as number | undefined,
+        sector: (s.sector as string) || undefined,
+        type: (s.type as MarketListItem['type']) || 'stock',
+        subType: (s.subType as string) || undefined
+      }))
+  } catch {
+    return []
+  }
+}
+
 export async function getMultipleQuotes(tickers: string[]): Promise<QuoteResult[]> {
   const results = await Promise.all(tickers.map(t => getQuote(t)))
   return results.filter((r): r is QuoteResult => r !== null)
