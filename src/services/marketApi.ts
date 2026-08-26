@@ -145,9 +145,18 @@ export async function listQuotes(opts: {
   }
 }
 
+// Sequential with a small stagger rather than Promise.all — brapi's anonymous
+// (no-token) tier rate-limits bursts of parallel requests per IP, so firing
+// N requests at once silently drops most of them (only the first few survive).
+// One at a time, 120ms apart, stays under that limit at the cost of latency.
 export async function getMultipleQuotes(tickers: string[]): Promise<QuoteResult[]> {
-  const results = await Promise.all(tickers.map(t => getQuote(t)))
-  return results.filter((r): r is QuoteResult => r !== null)
+  const out: QuoteResult[] = []
+  for (let i = 0; i < tickers.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 120))
+    const q = await getQuote(tickers[i])
+    if (q) out.push(q)
+  }
+  return out
 }
 
 // Fetches many tickers in a single request (brapi accepts a comma-separated
