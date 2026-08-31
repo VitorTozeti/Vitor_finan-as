@@ -352,7 +352,7 @@ export default function ConnectBank() {
 
 // URL do SDK web do Pluggy Connect. Confirme a versão atual na documentação do
 // Pluggy; ele expõe o global `window.PluggyConnect`.
-const PLUGGY_CONNECT_SDK = 'https://cdn.pluggy.ai/pluggy-connect/v2.9.1/pluggy-connect.js'
+const PLUGGY_CONNECT_SDK = 'https://cdn.pluggy.ai/pluggy-connect/latest/pluggy-connect.js'
 
 /** Carrega o script do Pluggy Connect uma única vez. */
 function loadPluggyConnect(): Promise<any> {

@@ -17,7 +17,7 @@ const PLUGGY_API = 'https://api.pluggy.ai'
 
 // Restringe quem pode chamar o Worker. Troque pelo domínio do seu app em
 // produção (ex.: 'https://vitortozeti.github.io'). '*' facilita o teste local.
-const ALLOWED_ORIGIN = '*'
+const ALLOWED_ORIGIN = 'https://vitortozeti.github.io'
 
 function corsHeaders() {
   return {
