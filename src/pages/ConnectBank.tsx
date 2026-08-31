@@ -6,7 +6,7 @@ import { formatCurrency } from '../utils/finance'
 import { parseStatement, parseStatementLines, ParsedStatementTx, DateFormatHint } from '../utils/statementImport'
 import { extractPdfLines } from '../utils/pdfExtract'
 import { decodeFileText, TextEncodingChoice } from '../utils/decodeFile'
-import { isBankSyncConfigured } from '../services/bankApi'
+import { isBankSyncConfigured, createConnectToken, fetchBankTransactions } from '../services/bankApi'
 import {
   Upload,
   FileText,
@@ -327,14 +327,93 @@ export default function ConnectBank() {
           </>
         )}
 
-        {tab === 'sync' && <OpenFinancePanel />}
+        {tab === 'sync' && (
+          <OpenFinancePanel
+            onTransactions={synced => {
+              // Reaproveita a mesma tela de revisão da importação de extrato.
+              setRows(synced)
+              setWarnings([])
+              setFormat('OFX')
+              setFileName('Open Finance')
+              setSelectedFile(null)
+              setTab('import')
+              if (synced.length > 0) {
+                pushToast(`${synced.length} lançamento(s) trazidos do banco`)
+              } else {
+                pushToast('Nenhum lançamento novo encontrado', 'error')
+              }
+            }}
+          />
+        )}
       </div>
     </div>
   )
 }
 
-function OpenFinancePanel() {
+// URL do SDK web do Pluggy Connect. Confirme a versão atual na documentação do
+// Pluggy; ele expõe o global `window.PluggyConnect`.
+const PLUGGY_CONNECT_SDK = 'https://cdn.pluggy.ai/pluggy-connect/v2.9.1/pluggy-connect.js'
+
+/** Carrega o script do Pluggy Connect uma única vez. */
+function loadPluggyConnect(): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const w = window as any
+    if (w.PluggyConnect) return resolve(w.PluggyConnect)
+    const existing = document.getElementById('pluggy-connect-sdk')
+    if (existing) {
+      existing.addEventListener('load', () => resolve(w.PluggyConnect))
+      existing.addEventListener('error', () => reject(new Error('Falha ao carregar o Pluggy')))
+      return
+    }
+    const script = document.createElement('script')
+    script.id = 'pluggy-connect-sdk'
+    script.src = PLUGGY_CONNECT_SDK
+    script.onload = () => resolve(w.PluggyConnect)
+    script.onerror = () => reject(new Error('Falha ao carregar o Pluggy'))
+    document.body.appendChild(script)
+  })
+}
+
+function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedStatementTx[]) => void }) {
   const configured = isBankSyncConfigured()
+  const [connecting, setConnecting] = useState(false)
+
+  async function handleConnect() {
+    setConnecting(true)
+    try {
+      const token = await createConnectToken()
+      if (!token) {
+        pushToast('Não foi possível iniciar a conexão. Confira o proxy.', 'error')
+        setConnecting(false)
+        return
+      }
+      const PluggyConnect = await loadPluggyConnect()
+      const pluggy = new PluggyConnect({
+        connectToken: token,
+        includeSandbox: true, // mostra bancos de teste; remova em produção
+        onSuccess: async (itemData: any) => {
+          const itemId = itemData?.item?.id
+          if (!itemId) {
+            pushToast('Conexão sem item válido', 'error')
+            setConnecting(false)
+            return
+          }
+          const rows = await fetchBankTransactions(itemId)
+          onTransactions(rows ?? [])
+          setConnecting(false)
+        },
+        onError: () => {
+          pushToast('Não foi possível conectar a conta', 'error')
+          setConnecting(false)
+        },
+        onClose: () => setConnecting(false)
+      })
+      pluggy.init()
+    } catch {
+      pushToast('Falha ao abrir o Pluggy', 'error')
+      setConnecting(false)
+    }
+  }
 
   return (
     <>
@@ -346,7 +425,7 @@ function OpenFinancePanel() {
           <div>
             <p className="text-sm font-medium">Sincronização automática (Open Finance)</p>
             <p className="text-xs text-muted mt-0.5">
-              Conecta sua conta via um agregador (Pluggy, Belvo) e traz os lançamentos sozinho.
+              Conecta sua conta via um agregador (Pluggy) e traz os lançamentos sozinho.
             </p>
           </div>
         </div>
@@ -355,10 +434,17 @@ function OpenFinancePanel() {
       {configured ? (
         <Card>
           <p className="text-sm font-medium mb-1 text-green">Backend configurado ✓</p>
-          <p className="text-xs text-muted">
-            A URL do proxy está definida. O fluxo de conexão pode ser iniciado a partir daqui assim que o widget do
-            agregador for integrado.
+          <p className="text-xs text-muted mb-3">
+            Toque abaixo para escolher seu banco (ex.: Itaú), autorizar pelo Open Finance e trazer os lançamentos para a
+            tela de revisão.
           </p>
+          <button
+            onClick={handleConnect}
+            disabled={connecting}
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-green py-3 text-sm font-semibold text-bg disabled:opacity-60"
+          >
+            <Link2 size={16} /> {connecting ? 'Abrindo conexão…' : 'Conectar minha conta'}
+          </button>
         </Card>
       ) : (
         <Card className="border-warn/30">

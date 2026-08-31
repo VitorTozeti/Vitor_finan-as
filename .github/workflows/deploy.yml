@@ -27,6 +27,7 @@ jobs:
       - run: npm run build
         env:
           VITE_BRAPI_TOKEN: ${{ secrets.VITE_BRAPI_TOKEN }}
+          VITE_BANK_PROXY_URL: ${{ secrets.VITE_BANK_PROXY_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
