@@ -103,27 +103,39 @@ async function waitItemReady(apiKey, itemId) {
   return item
 }
 
-// Busca TODAS as transações de uma conta, suportando cursor (`next`) e fallback para páginas.
+// Busca TODAS as transações de uma conta usando o endpoint v2 da Pluggy,
+// que usa paginação por cursor (parâmetro `after`).
+// O endpoint antigo (/transactions?pageSize=&page=) foi descontinuado e retorna 410 Gone.
 async function fetchAllTransactions(apiKey, accountId, from) {
   const all = []
-  let nextPath = `/transactions?accountId=${encodeURIComponent(accountId)}&pageSize=${PAGE_SIZE}`
-  if (from) nextPath += `&from=${encodeURIComponent(from)}`
-
+  let after = null
   let safetyCounter = 0
-  while (nextPath && safetyCounter < 30) {
+
+  while (safetyCounter < 50) {
     safetyCounter++
-    const data = await pluggyGet(apiKey, nextPath.startsWith('/') ? nextPath : `/${nextPath}`)
+    const qs = new URLSearchParams({ accountId, pageSize: String(PAGE_SIZE) })
+    if (from) qs.set('from', from)
+    if (after) qs.set('after', after)
+
+    const data = await pluggyGet(apiKey, `/transactions?${qs.toString()}`)
     const results = data.results || []
     all.push(...results)
 
-    if (data.next) {
-      nextPath = data.next.startsWith('/transactions') ? data.next : `/transactions${data.next.startsWith('?') ? '' : '?'}${data.next}`
-    } else if (data.totalPages && data.page && data.page < data.totalPages) {
-      const nextPage = data.page + 1
-      nextPath = `/transactions?accountId=${encodeURIComponent(accountId)}&pageSize=${PAGE_SIZE}&page=${nextPage}`
-      if (from) nextPath += `&from=${encodeURIComponent(from)}`
+    // O campo `next` da API v2 contém a query string com o cursor `after`.
+    // Se não houver `next`, chegamos ao fim da paginação.
+    if (data.next && results.length > 0) {
+      // data.next pode ser uma URL completa ou só a query string (?after=xxx...)
+      const nextUrl = data.next.includes('after=')
+        ? data.next
+        : null
+      if (nextUrl) {
+        const parsed = new URL(nextUrl.startsWith('http') ? nextUrl : `https://api.pluggy.ai${nextUrl}`)
+        after = parsed.searchParams.get('after')
+      } else {
+        break
+      }
     } else {
-      nextPath = null
+      break
     }
   }
   return all
