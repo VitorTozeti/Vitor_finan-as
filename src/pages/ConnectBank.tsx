@@ -249,6 +249,20 @@ export default function ConnectBank() {
 
             {rows.length > 0 && (
               <>
+                {fileName === 'Open Finance' && (
+                  <Card className="border-green/30 bg-green/5">
+                    <div className="flex items-start gap-2.5">
+                      <div className="h-2 w-2 rounded-full bg-green mt-1.5 shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-green">Lançamentos carregados do banco!</p>
+                        <p className="text-[11px] text-muted mt-0.5">
+                          Revise as categorias abaixo e clique no botão verde <strong className="text-txt">Importar lançamentos</strong> para salvá-los no seu app.
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
                 <Card>
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-sm font-medium">{rows.length} lançamentos</p>

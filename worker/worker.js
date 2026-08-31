@@ -35,17 +35,30 @@ const PAGE_SIZE = 500
 const ITEM_POLL_MAX_MS = 90000
 const ITEM_POLL_INTERVAL_MS = 2500
 
-function corsHeaders() {
+// Permite o domínio de produção e qualquer localhost/127.0.0.1 em desenvolvimento.
+function getOriginHeader(request) {
+  const origin = request?.headers?.get('Origin') || ''
+  if (
+    origin === 'https://vitortozeti.github.io' ||
+    origin.startsWith('http://localhost:') ||
+    origin.startsWith('http://127.0.0.1:')
+  ) {
+    return origin
+  }
+  return 'https://vitortozeti.github.io'
+}
+
+function corsHeaders(request) {
   return {
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Origin': getOriginHeader(request),
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Content-Type': 'application/json'
   }
 }
 
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: corsHeaders() })
+function json(body, status = 200, request = null) {
+  return new Response(JSON.stringify(body), { status, headers: corsHeaders(request) })
 }
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
@@ -90,24 +103,29 @@ async function waitItemReady(apiKey, itemId) {
   return item
 }
 
-// Busca TODAS as transações de uma conta, paginando até o fim.
+// Busca TODAS as transações de uma conta, suportando cursor (`next`) e fallback para páginas.
 async function fetchAllTransactions(apiKey, accountId, from) {
   const all = []
-  let page = 1
-  let totalPages = 1
-  do {
-    const qs = new URLSearchParams({
-      accountId,
-      pageSize: String(PAGE_SIZE),
-      page: String(page)
-    })
-    if (from) qs.set('from', from)
-    const data = await pluggyGet(apiKey, `/transactions?${qs.toString()}`)
+  let nextPath = `/transactions?accountId=${encodeURIComponent(accountId)}&pageSize=${PAGE_SIZE}`
+  if (from) nextPath += `&from=${encodeURIComponent(from)}`
+
+  let safetyCounter = 0
+  while (nextPath && safetyCounter < 30) {
+    safetyCounter++
+    const data = await pluggyGet(apiKey, nextPath.startsWith('/') ? nextPath : `/${nextPath}`)
     const results = data.results || []
     all.push(...results)
-    totalPages = data.totalPages || 1
-    page += 1
-  } while (page <= totalPages)
+
+    if (data.next) {
+      nextPath = data.next.startsWith('/transactions') ? data.next : `/transactions${data.next.startsWith('?') ? '' : '?'}${data.next}`
+    } else if (data.totalPages && data.page && data.page < data.totalPages) {
+      const nextPage = data.page + 1
+      nextPath = `/transactions?accountId=${encodeURIComponent(accountId)}&pageSize=${PAGE_SIZE}&page=${nextPage}`
+      if (from) nextPath += `&from=${encodeURIComponent(from)}`
+    } else {
+      nextPath = null
+    }
+  }
   return all
 }
 
@@ -120,11 +138,21 @@ function normalizeTx(t, account) {
     ? (isCredit ? `Cartão ${account.name || account.marketingName || ''}`.trim() : (account.name || account.marketingName || ''))
     : ''
   const baseDesc = t.description || t.descriptionRaw || 'Lançamento'
+
+  // Na Pluggy:
+  // - Em contas correntes/bancárias: valor negativo = débito/gasto (expense), positivo = crédito/depósito (income).
+  // - Em cartões de crédito (CREDIT): valor positivo = despesa na fatura (expense), negativo = estorno/pagamento (income).
+  let type = 'expense'
+  if (isCredit) {
+    type = t.amount < 0 ? 'income' : 'expense'
+  } else {
+    type = t.amount < 0 ? 'expense' : 'income'
+  }
+
   return {
     date: String(t.date).slice(0, 10),
     amount: Math.abs(t.amount),
-    // Pluggy: amount negativo = saída (débito/gasto). Positivo = entrada.
-    type: t.amount < 0 ? 'expense' : 'income',
+    type,
     description: tag ? `${baseDesc} · ${tag}` : baseDesc,
     categoryId: 'outros',
     fitid: t.id
@@ -137,7 +165,7 @@ export default {
 
     // Pré-checagem do navegador (CORS).
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders() })
+      return new Response(null, { headers: corsHeaders(request) })
     }
 
     try {
@@ -150,14 +178,14 @@ export default {
           body: JSON.stringify({})
         })
         const data = await res.json()
-        return json({ accessToken: data.accessToken })
+        return json({ accessToken: data.accessToken }, 200, request)
       }
 
       // --- Endpoint B: TODOS os dados de uma conexão (itemId) ---
       // contas + cartões + investimentos, com histórico completo e paginado.
       if (url.pathname.startsWith('/transactions/') && request.method === 'GET') {
         const itemId = decodeURIComponent(url.pathname.slice('/transactions/'.length))
-        if (!itemId) return json({ error: 'itemId ausente' }, 400)
+        if (!itemId) return json({ error: 'itemId ausente' }, 400, request)
         const apiKey = await getApiKey(env)
 
         // Data inicial do histórico: ?from=YYYY-MM-DD tem prioridade;
@@ -173,7 +201,7 @@ export default {
         // 1) Esperar o item terminar de sincronizar — senão vem parcial/vazio.
         const item = await waitItemReady(apiKey, itemId)
         if (item.status === 'LOGIN_ERROR' || item.status === 'INVALID_CREDENTIALS') {
-          return json({ error: 'Falha no login do banco. Reconecte a conta.', status: item.status }, 400)
+          return json({ error: 'Falha no login do banco. Reconecte a conta.', status: item.status }, 400, request)
         }
 
         // 2) Todas as contas do item (bancárias E cartões de crédito).
@@ -225,12 +253,12 @@ export default {
             transactionsCount: transactions.length,
             investmentsCount: investments.length
           }
-        })
+        }, 200, request)
       }
 
-      return json({ error: 'not found' }, 404)
+      return json({ error: 'not found' }, 404, request)
     } catch (err) {
-      return json({ error: err.message || 'erro interno' }, 500)
+      return json({ error: err.message || 'erro interno' }, 500, request)
     }
   }
 }
