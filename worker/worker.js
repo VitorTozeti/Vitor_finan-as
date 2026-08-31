@@ -103,39 +103,43 @@ async function waitItemReady(apiKey, itemId) {
   return item
 }
 
-// Busca TODAS as transações de uma conta usando o endpoint v2 da Pluggy,
-// que usa paginação por cursor (parâmetro `after`).
-// O endpoint antigo (/transactions?pageSize=&page=) foi descontinuado e retorna 410 Gone.
+// Busca TODAS as transações de uma conta usando o endpoint /v2/transactions
+// da Pluggy com paginação por cursor (parâmetro `next`).
+// O endpoint antigo /transactions foi descontinuado e retorna 410 Gone.
 async function fetchAllTransactions(apiKey, accountId, from) {
   const all = []
-  let after = null
+  let cursorNext = null
   let safetyCounter = 0
 
   while (safetyCounter < 50) {
     safetyCounter++
-    const qs = new URLSearchParams({ accountId, pageSize: String(PAGE_SIZE) })
-    if (from) qs.set('from', from)
-    if (after) qs.set('after', after)
 
-    const data = await pluggyGet(apiKey, `/transactions?${qs.toString()}`)
+    // Monta a query string com os parâmetros aceitos pelo /v2/transactions
+    const qs = new URLSearchParams({ accountId })
+    if (from) qs.set('from', from)
+    if (cursorNext) qs.set('next', cursorNext)
+
+    const data = await pluggyGet(apiKey, `/v2/transactions?${qs.toString()}`)
     const results = data.results || []
     all.push(...results)
 
-    // O campo `next` da API v2 contém a query string com o cursor `after`.
-    // Se não houver `next`, chegamos ao fim da paginação.
-    if (data.next && results.length > 0) {
-      // data.next pode ser uma URL completa ou só a query string (?after=xxx...)
-      const nextUrl = data.next.includes('after=')
-        ? data.next
-        : null
-      if (nextUrl) {
-        const parsed = new URL(nextUrl.startsWith('http') ? nextUrl : `https://api.pluggy.ai${nextUrl}`)
-        after = parsed.searchParams.get('after')
-      } else {
-        break
+    // Quando não há mais páginas, data.next vem null/undefined ou results vazio.
+    if (!data.next || results.length === 0) break
+
+    // data.next pode ser:
+    //   - Uma string de cursor opaca (ex.: "MjAyMC0xMC0xNVQwMDowM...")
+    //   - Uma URL completa ou parcial com ?next=... embutido
+    // Extraímos o valor puro do cursor para passar no próximo request.
+    if (data.next.includes('next=')) {
+      try {
+        const parsed = new URL(data.next.startsWith('http') ? data.next : `https://api.pluggy.ai${data.next}`)
+        cursorNext = parsed.searchParams.get('next') || data.next
+      } catch {
+        cursorNext = data.next
       }
     } else {
-      break
+      // Cursor opaco simples — usar diretamente
+      cursorNext = data.next
     }
   }
   return all
