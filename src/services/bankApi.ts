@@ -39,18 +39,76 @@ export async function createConnectToken(): Promise<string | null> {
   }
 }
 
-/** Step 2: after the user links an account, the proxy returns normalized
- * transactions for the given connection id (itemId). Shape matches the
- * statement-import parser so both paths feed the same review screen. */
-export async function fetchBankTransactions(itemId: string): Promise<ParsedStatementTx[] | null> {
+/** Resumo de uma conta ou cartão devolvido pelo proxy. */
+export interface BankAccountSummary {
+  id: string
+  name: string | null
+  type: string // 'BANK' | 'CREDIT'
+  subtype: string | null
+  number: string | null
+  balance: number | null
+  currency: string
+  creditLimit: number | null
+  availableLimit: number | null
+}
+
+export interface BankInvestment {
+  name: string
+  type: string
+  balance: number | null
+  value: number | null
+  currency: string
+}
+
+export interface BankSyncResult {
+  transactions: ParsedStatementTx[]
+  accounts: BankAccountSummary[]
+  investments: BankInvestment[]
+  meta: {
+    itemStatus?: string
+    from?: string
+    accountsCount?: number
+    transactionsCount?: number
+    investmentsCount?: number
+  }
+  error?: string
+}
+
+/** Step 2: after the user links an account, the proxy returns ALL normalized
+ * transactions (contas + cartões, histórico completo e paginado), além do
+ * resumo das contas e investimentos. A forma de `transactions` bate com o
+ * parser de extrato, então as duas vias alimentam a mesma tela de revisão.
+ *
+ * @param months quanto de histórico buscar (padrão do proxy: 24 meses). */
+export async function fetchBankData(itemId: string, months?: number): Promise<BankSyncResult | null> {
   if (!PROXY_URL) return null
   try {
-    const res = await fetch(`${PROXY_URL}/transactions/${encodeURIComponent(itemId)}`)
-    if (!res.ok) return null
-    const data = await res.json()
+    const qs = months ? `?months=${encodeURIComponent(months)}` : ''
+    const res = await fetch(`${PROXY_URL}/transactions/${encodeURIComponent(itemId)}${qs}`)
+    const data = await res.json().catch(() => null)
+    if (!res.ok) {
+      return {
+        transactions: [],
+        accounts: [],
+        investments: [],
+        meta: {},
+        error: (data?.error as string) || `Falha ao buscar dados (${res.status})`
+      }
+    }
     if (!Array.isArray(data?.transactions)) return null
-    return data.transactions as ParsedStatementTx[]
+    return {
+      transactions: data.transactions as ParsedStatementTx[],
+      accounts: (data.accounts as BankAccountSummary[]) ?? [],
+      investments: (data.investments as BankInvestment[]) ?? [],
+      meta: data.meta ?? {}
+    }
   } catch {
     return null
   }
+}
+
+/** Compatibilidade: devolve só as transações (usado pela tela de revisão). */
+export async function fetchBankTransactions(itemId: string): Promise<ParsedStatementTx[] | null> {
+  const data = await fetchBankData(itemId)
+  return data ? data.transactions : null
 }

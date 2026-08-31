@@ -6,7 +6,7 @@ import { formatCurrency } from '../utils/finance'
 import { parseStatement, parseStatementLines, ParsedStatementTx, DateFormatHint } from '../utils/statementImport'
 import { extractPdfLines } from '../utils/pdfExtract'
 import { decodeFileText, TextEncodingChoice } from '../utils/decodeFile'
-import { isBankSyncConfigured, createConnectToken, fetchBankTransactions } from '../services/bankApi'
+import { isBankSyncConfigured, createConnectToken, fetchBankData } from '../services/bankApi'
 import {
   Upload,
   FileText,
@@ -398,8 +398,26 @@ function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedSta
             setConnecting(false)
             return
           }
-          const rows = await fetchBankTransactions(itemId)
-          onTransactions(rows ?? [])
+          // A sincronização do banco (contas + cartões + histórico) pode levar
+          // alguns segundos; o proxy espera o item ficar pronto antes de responder.
+          pushToast('Sincronizando contas e cartões… isso pode levar alguns segundos.')
+          const data = await fetchBankData(itemId)
+          if (!data) {
+            pushToast('Não foi possível buscar os dados. Confira o proxy.', 'error')
+            setConnecting(false)
+            return
+          }
+          if (data.error) {
+            pushToast(data.error, 'error')
+            setConnecting(false)
+            return
+          }
+          const { accountsCount = 0, investmentsCount = 0 } = data.meta
+          if (accountsCount > 0) {
+            const inv = investmentsCount > 0 ? ` e ${investmentsCount} investimento(s)` : ''
+            pushToast(`${accountsCount} conta(s)/cartão(ões)${inv} sincronizados`)
+          }
+          onTransactions(data.transactions)
           setConnecting(false)
         },
         onError: () => {
