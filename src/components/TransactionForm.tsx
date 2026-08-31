@@ -1,10 +1,24 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Modal, pushToast } from './Primitives'
+import AmountInput from './AmountInput'
 import { useStore } from '../store/useStore'
 import { Transaction, PaymentMethod } from '../types'
-import { parseAmountInput } from '../utils/finance'
+import { ChevronDown } from 'lucide-react'
 
 const PAYMENT_METHODS: PaymentMethod[] = ['Pix', 'Débito', 'Crédito', 'Dinheiro', 'Outro']
+const FALLBACK_CATEGORY_ID = 'outros'
+const QUICK_ADD = [10, 20, 50, 100]
+
+/** Builds a local 'YYYY-MM-DD' string for `base` shifted by `monthDelta`
+ * months, clamping the day to the target month's length. Avoids the timezone
+ * drift of `new Date('YYYY-MM-DD')`. */
+function shiftMonth(baseIso: string, monthDelta: number): string {
+  const [y, m, d] = baseIso.split('-').map(Number)
+  const target = new Date(y, m - 1 + monthDelta, 1)
+  const daysInMonth = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()
+  const day = Math.min(d, daysInMonth)
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
 
 export default function TransactionForm({
   open,
@@ -15,21 +29,24 @@ export default function TransactionForm({
   onClose: () => void
   editing?: Transaction | null
 }) {
-  const { state, addTransaction, updateTransaction, addCategory } = useStore()
+  const { state, addTransaction, updateTransaction, addCategory, addRecurringRule } = useStore()
   const [type, setType] = useState<'expense' | 'income'>('expense')
-  const [amount, setAmount] = useState('')
+  const [amount, setAmount] = useState(0)
   const [description, setDescription] = useState('')
-  const [categoryId, setCategoryId] = useState(state.categories[0]?.id ?? '')
+  const [categoryId, setCategoryId] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Pix')
   const [note, setNote] = useState('')
   const [showNewCategory, setShowNewCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState('')
+  const [showMore, setShowMore] = useState(false)
+  const [repeatMonthly, setRepeatMonthly] = useState(false)
+  const [installments, setInstallments] = useState(1)
 
   useEffect(() => {
     if (editing) {
       setType(editing.type)
-      setAmount(String(editing.amount))
+      setAmount(editing.amount)
       setDescription(editing.description)
       setCategoryId(editing.categoryId)
       setDate(editing.date)
@@ -37,40 +54,105 @@ export default function TransactionForm({
       setNote(editing.note ?? '')
     } else if (open) {
       setType('expense')
-      setAmount('')
+      setAmount(0)
       setDescription('')
-      setCategoryId(state.categories[0]?.id ?? '')
+      setCategoryId('')
       setDate(new Date().toISOString().slice(0, 10))
       setPaymentMethod('Pix')
       setNote('')
     }
+    // Reset the "more options" section every time the modal opens.
+    if (open) {
+      setShowMore(false)
+      setRepeatMonthly(false)
+      setInstallments(1)
+      setShowNewCategory(false)
+    }
   }, [editing, open])
 
+  // Most-recently-used categories first, so the common case is a single tap.
+  const orderedCategories = useMemo(() => {
+    const lastUsed = new Map<string, string>()
+    for (const t of state.transactions) {
+      const prev = lastUsed.get(t.categoryId)
+      if (!prev || t.date > prev) lastUsed.set(t.categoryId, t.date)
+    }
+    return [...state.categories].sort((a, b) => (lastUsed.get(b.id) ?? '').localeCompare(lastUsed.get(a.id) ?? ''))
+  }, [state.categories, state.transactions])
+
   function handleSave() {
-    const numeric = parseAmountInput(amount)
-    if (!numeric || numeric <= 0) {
+    if (!amount || amount <= 0) {
       pushToast('Informe um valor válido', 'error')
       return
     }
-    if (!categoryId) {
-      pushToast('Escolha uma categoria', 'error')
+    // Only the value is required — an unpicked category falls back to "Outros".
+    const finalCategoryId = categoryId || FALLBACK_CATEGORY_ID
+    const trimmedDescription = description.trim()
+
+    if (editing) {
+      updateTransaction(editing.id, {
+        type,
+        amount,
+        description: trimmedDescription,
+        categoryId: finalCategoryId,
+        date,
+        paymentMethod,
+        note: note.trim() || undefined
+      })
+      pushToast('Alterações salvas')
+      onClose()
       return
     }
-    const payload = {
+
+    const count = Math.max(1, Math.min(48, Math.round(installments)))
+    if (count > 1) {
+      // Split across `count` monthly transactions; last parcel absorbs any
+      // rounding remainder so the parts sum exactly to the total.
+      const perCents = Math.floor((amount * 100) / count)
+      for (let i = 0; i < count; i++) {
+        const cents = i === count - 1 ? Math.round(amount * 100) - perCents * (count - 1) : perCents
+        addTransaction({
+          type,
+          amount: cents / 100,
+          description: `${trimmedDescription || 'Compra parcelada'} (${i + 1}/${count})`,
+          categoryId: finalCategoryId,
+          date: shiftMonth(date, i),
+          paymentMethod,
+          note: note.trim() || undefined
+        })
+      }
+      pushToast(`Parcelamento lançado em ${count}x`)
+      onClose()
+      return
+    }
+
+    addTransaction({
       type,
-      amount: numeric,
-      description: description.trim(),
-      categoryId,
+      amount,
+      description: trimmedDescription,
+      categoryId: finalCategoryId,
       date,
       paymentMethod,
       note: note.trim() || undefined
-    }
-    if (editing) {
-      updateTransaction(editing.id, payload)
-      pushToast('Alterações salvas')
+    })
+
+    if (repeatMonthly) {
+      // Register the recurring rule and mark this month as already generated so
+      // the store doesn't create a duplicate for the transaction we just added.
+      const [y, m, d] = date.split('-').map(Number)
+      addRecurringRule({
+        description: trimmedDescription || 'Recorrência',
+        amount,
+        type,
+        categoryId: finalCategoryId,
+        paymentMethod,
+        dayOfMonth: d,
+        active: true,
+        lastGeneratedMonth: `${y}-${String(m).padStart(2, '0')}`
+      })
+      pushToast('Gasto adicionado e recorrência criada')
     } else {
-      addTransaction(payload)
-      pushToast('Gasto adicionado com sucesso')
+      pushToast(type === 'expense' ? 'Gasto adicionado com sucesso' : 'Entrada adicionada com sucesso')
     }
     onClose()
   }
@@ -94,14 +176,7 @@ export default function TransactionForm({
 
         <div>
           <label className="block text-xs font-medium text-muted mb-1.5">Valor</label>
-          <input
-            autoFocus
-            inputMode="decimal"
-            value={amount}
-            onChange={e => setAmount(e.target.value)}
-            placeholder="R$ 0,00"
-            className="w-full rounded-xl bg-bg border border-line/10 px-4 py-3 text-xl font-semibold outline-none focus:border-green"
-          />
+          <AmountInput value={amount} onChange={setAmount} quickAdd={QUICK_ADD} autoFocus />
         </div>
 
         <div>
@@ -116,7 +191,7 @@ export default function TransactionForm({
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="block text-xs font-medium text-muted">Categoria</label>
+            <label className="block text-xs font-medium text-muted">Categoria (opcional)</label>
             <button
               onClick={() => setShowNewCategory(v => !v)}
               className="text-xs font-medium text-green"
@@ -147,10 +222,10 @@ export default function TransactionForm({
             </div>
           )}
           <div className="flex flex-wrap gap-2">
-            {state.categories.map(c => (
+            {orderedCategories.map(c => (
               <button
                 key={c.id}
-                onClick={() => setCategoryId(c.id)}
+                onClick={() => setCategoryId(id => (id === c.id ? '' : c.id))}
                 className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-medium border transition-colors ${
                   categoryId === c.id
                     ? 'bg-green/15 border-green text-green'
@@ -190,14 +265,74 @@ export default function TransactionForm({
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-medium text-muted mb-1.5">Observação (opcional)</label>
-          <input
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
-          />
-        </div>
+        {editing && (
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1.5">Observação (opcional)</label>
+            <input
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+            />
+          </div>
+        )}
+
+        {!editing && (
+          <div className="rounded-xl border border-line/10">
+            <button
+              type="button"
+              onClick={() => setShowMore(v => !v)}
+              className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-medium text-muted"
+            >
+              Mais opções
+              <ChevronDown size={15} className={`transition-transform ${showMore ? 'rotate-180' : ''}`} />
+            </button>
+            {showMore && (
+              <div className="space-y-3 px-4 pb-4">
+                <label className="flex items-center justify-between gap-3">
+                  <span className="text-sm">Repete todo mês</span>
+                  <input
+                    type="checkbox"
+                    checked={repeatMonthly}
+                    disabled={installments > 1}
+                    onChange={e => setRepeatMonthly(e.target.checked)}
+                    className="h-4 w-4 accent-green"
+                  />
+                </label>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm">Parcelar em</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={1}
+                      max={48}
+                      value={installments}
+                      onChange={e => {
+                        const n = Math.max(1, Math.min(48, parseInt(e.target.value, 10) || 1))
+                        setInstallments(n)
+                        if (n > 1) setRepeatMonthly(false)
+                      }}
+                      className="w-16 rounded-lg bg-bg border border-line/10 px-2 py-1.5 text-sm text-center outline-none focus:border-green"
+                    />
+                    <span className="text-sm text-muted">x</span>
+                  </div>
+                </div>
+                {installments > 1 && amount > 0 && (
+                  <p className="text-[11px] text-muted">
+                    {installments} parcelas mensais a partir da data escolhida.
+                  </p>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-muted mb-1.5">Observação (opcional)</label>
+                  <input
+                    value={note}
+                    onChange={e => setNote(e.target.value)}
+                    className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <button
           onClick={handleSave}

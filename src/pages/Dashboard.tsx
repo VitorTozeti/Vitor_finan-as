@@ -3,7 +3,7 @@ import Header from '../components/Header'
 import { Card, ProgressBar, BalanceCard } from '../components/Primitives'
 import { useStore } from '../store/useStore'
 import { isSameMonth, sumByType, formatCurrency, getNextPayDate, daysUntil } from '../utils/finance'
-import { generateInsights, overallHealth } from '../utils/insights'
+import { generateInsights, financialSummary } from '../utils/insights'
 import { summarizeBenefits } from '../utils/benefits'
 import TransactionForm from '../components/TransactionForm'
 import { Plus, ArrowUpRight, ArrowDownRight, Sparkles, Gift, ChevronRight } from 'lucide-react'
@@ -36,14 +36,7 @@ export default function Dashboard() {
     [state.transactions, state.categories, income, state.budgets]
   )
 
-  const lastMonthRef = new Date()
-  lastMonthRef.setMonth(lastMonthRef.getMonth() - 1)
-  const lastMonthExpenses = sumByType(
-    state.transactions.filter(t => t.type === 'expense' && isSameMonth(t.date, lastMonthRef)),
-    'expense'
-  )
-  const trendWorse = expenses > lastMonthExpenses
-  const health = overallHealth(income, expenses, trendWorse)
+  const summary = financialSummary(income, expenses)
 
   const topCategories = useMemo(() => {
     const map = new Map<string, number>()
@@ -97,14 +90,12 @@ export default function Dashboard() {
           </p>
         </Card>
 
-        <Card className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{health.emoji}</span>
-            <div>
-              <p className="text-sm font-semibold">Situação financeira: {health.label}</p>
-              <p className="text-xs text-muted">Próximo pagamento em {daysToPay} dia{daysToPay === 1 ? '' : 's'}</p>
-            </div>
-          </div>
+        <Card>
+          <p className="text-sm font-semibold">{summary.headline}</p>
+          <p className="text-xs text-muted mt-1">{summary.detail}</p>
+          <p className="text-xs text-muted mt-0.5">
+            Próximo pagamento em {daysToPay} dia{daysToPay === 1 ? '' : 's'}
+          </p>
         </Card>
 
         {benefits.count > 0 && (

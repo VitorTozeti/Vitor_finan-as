@@ -1,5 +1,5 @@
 import { Transaction, Category, Budget } from '../types'
-import { isSameMonth, sumByType, formatCurrency, computeHealthStatus, HealthStatus } from './finance'
+import { isSameMonth, sumByType, formatCurrency } from './finance'
 
 export interface Insight {
   id: string
@@ -111,17 +111,28 @@ export function generateInsights(
   return insights
 }
 
-export function overallHealth(
+/** Neutral, factual summary of the month — states the numbers without an
+ * emotional verdict ("Crítico"/"Saudável"). `percentUsed` still drives the
+ * progress-bar color elsewhere; here we only describe what's happening. */
+export function financialSummary(
   totalIncome: number,
-  totalExpenses: number,
-  trendWorse: boolean
-): { status: HealthStatus; label: string; emoji: string } {
-  const pct = totalIncome > 0 ? (totalExpenses / totalIncome) * 100 : 0
-  const status = computeHealthStatus(pct, trendWorse)
-  const map = {
-    healthy: { label: 'Saudável', emoji: '🟢' },
-    attention: { label: 'Atenção', emoji: '🟡' },
-    critical: { label: 'Crítico', emoji: '🔴' }
+  totalExpenses: number
+): { percentUsed: number; headline: string; detail: string } {
+  const percentUsed = totalIncome > 0 ? Math.min(100, (totalExpenses / totalIncome) * 100) : 0
+  const available = totalIncome - totalExpenses
+  if (totalIncome <= 0) {
+    return {
+      percentUsed: 0,
+      headline: 'Adicione sua renda para acompanhar o mês',
+      detail: `Você gastou ${formatCurrency(totalExpenses)} até agora`
+    }
   }
-  return { status, ...map[status] }
+  return {
+    percentUsed,
+    headline: `Você usou ${percentUsed.toFixed(0)}% da renda este mês`,
+    detail:
+      available >= 0
+        ? `Restam ${formatCurrency(available)} até o próximo pagamento`
+        : `Você passou ${formatCurrency(Math.abs(available))} da sua renda`
+  }
 }

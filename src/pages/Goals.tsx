@@ -1,9 +1,55 @@
 import { useMemo, useState } from 'react'
 import Header from '../components/Header'
 import { Card, EmptyState, Modal, ProgressBar, pushToast, ConfirmDialog } from '../components/Primitives'
+import AmountInput from '../components/AmountInput'
 import { useStore } from '../store/useStore'
 import { formatCurrency, daysUntil } from '../utils/finance'
+import { Goal } from '../types'
 import { Plus, Target, Pencil } from 'lucide-react'
+
+const CONTRIBUTION_QUICK_ADD = [20, 50, 100]
+
+/** Suggested monthly deposit to hit a goal's deadline, plus a human label.
+ * Returns null when there's nothing left to save or no deadline to pace by. */
+function monthlyPlan(goal: Goal): string | null {
+  const remaining = goal.target - goal.saved
+  if (remaining <= 0) return null
+  if (!goal.deadline) return null
+  const days = daysUntil(new Date(goal.deadline))
+  if (days < 0) return `Faltam ${formatCurrency(remaining)} e o prazo já venceu`
+  const monthsLeft = Math.max(1, Math.ceil(days / 30))
+  const perMonth = remaining / monthsLeft
+  return `Guarde ${formatCurrency(perMonth)}/mês para chegar no prazo`
+}
+
+/** Per-goal contribution field with quick-add chips. Kept as its own component
+ * so each card holds its own draft amount. */
+function GoalContribution({ goal, onAdd }: { goal: Goal; onAdd: (delta: number) => void }) {
+  const [amount, setAmount] = useState(0)
+  return (
+    <div className="mt-3 space-y-2">
+      <AmountInput
+        value={amount}
+        onChange={setAmount}
+        quickAdd={CONTRIBUTION_QUICK_ADD}
+        allowNegative
+        placeholder="Adicionar valor"
+      />
+      <button
+        onClick={() => {
+          if (amount !== 0) {
+            onAdd(amount)
+            setAmount(0)
+          }
+        }}
+        disabled={amount === 0}
+        className="w-full rounded-lg bg-green py-2 text-xs font-semibold text-bg disabled:opacity-40"
+      >
+        {amount < 0 ? 'Corrigir aporte' : 'Adicionar ao guardado'}
+      </button>
+    </div>
+  )
+}
 
 export default function Goals() {
   const { state, addGoal, updateGoal, deleteGoal } = useStore()
@@ -11,14 +57,14 @@ export default function Goals() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<string | null>(null)
   const [name, setName] = useState('')
-  const [target, setTarget] = useState('')
-  const [saved, setSaved] = useState('')
+  const [target, setTarget] = useState(0)
+  const [saved, setSaved] = useState(0)
   const [deadline, setDeadline] = useState('')
 
   function resetForm() {
     setName('')
-    setTarget('')
-    setSaved('')
+    setTarget(0)
+    setSaved(0)
     setDeadline('')
     setEditingId(null)
   }
@@ -28,23 +74,21 @@ export default function Goals() {
     setFormOpen(true)
   }
 
-  function openEdit(g: { id: string; name: string; target: number; saved: number; deadline?: string }) {
+  function openEdit(g: Goal) {
     setEditingId(g.id)
     setName(g.name)
-    setTarget(String(g.target))
-    setSaved(String(g.saved))
+    setTarget(g.target)
+    setSaved(g.saved)
     setDeadline(g.deadline ?? '')
     setFormOpen(true)
   }
 
   function handleSave() {
-    const targetNum = parseFloat(target.replace(',', '.'))
-    const savedNum = parseFloat((saved || '0').replace(',', '.'))
-    if (!name.trim() || !targetNum || targetNum <= 0) {
+    if (!name.trim() || !target || target <= 0) {
       pushToast('Preencha nome e valor da meta', 'error')
       return
     }
-    const payload = { name: name.trim(), target: targetNum, saved: Math.max(0, savedNum), deadline: deadline || undefined }
+    const payload = { name: name.trim(), target, saved: Math.max(0, saved), deadline: deadline || undefined }
     if (editingId) {
       updateGoal(editingId, payload)
       pushToast('Meta atualizada')
@@ -81,6 +125,8 @@ export default function Goals() {
           orderedGoals.map(g => {
             const pct = g.target > 0 ? Math.min(100, (g.saved / g.target) * 100) : 0
             const days = g.deadline ? daysUntil(new Date(g.deadline)) : null
+            const remaining = Math.max(0, g.target - g.saved)
+            const plan = monthlyPlan(g)
             return (
               <Card key={g.id}>
                 <div className="flex items-center justify-between mb-2">
@@ -104,6 +150,12 @@ export default function Goals() {
                   </p>
                   <p className="font-medium text-green">{pct.toFixed(0)}%</p>
                 </div>
+                {remaining > 0 ? (
+                  <p className="text-[11px] text-muted mt-1">Faltam {formatCurrency(remaining)}</p>
+                ) : (
+                  <p className="text-[11px] text-green mt-1">Meta alcançada! 🎉</p>
+                )}
+                {plan && <p className="text-[11px] text-muted mt-0.5">{plan}</p>}
                 {days != null && (
                   <p className={`text-[11px] mt-1 ${days < 0 ? 'text-danger' : 'text-muted'}`}>
                     {days < 0
@@ -113,23 +165,13 @@ export default function Goals() {
                         : `Faltam ${days} dia${days === 1 ? '' : 's'}`}
                   </p>
                 )}
-                <div className="flex items-center gap-2 mt-3">
-                  <input
-                    type="number"
-                    placeholder="Adicionar valor (ou negativo para corrigir)"
-                    className="flex-1 rounded-lg bg-bg border border-line/10 px-3 py-1.5 text-xs outline-none focus:border-green"
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        const val = parseFloat((e.target as HTMLInputElement).value)
-                        if (val && val !== 0) {
-                          updateGoal(g.id, { saved: Math.max(0, g.saved + val) })
-                          ;(e.target as HTMLInputElement).value = ''
-                          pushToast(val > 0 ? 'Progresso atualizado' : 'Aporte corrigido')
-                        }
-                      }
-                    }}
-                  />
-                </div>
+                <GoalContribution
+                  goal={g}
+                  onAdd={val => {
+                    updateGoal(g.id, { saved: Math.max(0, g.saved + val) })
+                    pushToast(val > 0 ? 'Progresso atualizado' : 'Aporte corrigido')
+                  }}
+                />
               </Card>
             )
           })
@@ -162,25 +204,13 @@ export default function Goals() {
               className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1.5">Valor alvo</label>
-              <input
-                inputMode="decimal"
-                value={target}
-                onChange={e => setTarget(e.target.value)}
-                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted mb-1.5">Já guardado</label>
-              <input
-                inputMode="decimal"
-                value={saved}
-                onChange={e => setSaved(e.target.value)}
-                className="w-full rounded-xl bg-bg border border-line/10 px-4 py-2.5 text-sm outline-none focus:border-green"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1.5">Valor alvo</label>
+            <AmountInput value={target} onChange={setTarget} quickAdd={[100, 500, 1000]} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-muted mb-1.5">Já guardado</label>
+            <AmountInput value={saved} onChange={setSaved} />
           </div>
           <div>
             <label className="block text-xs font-medium text-muted mb-1.5">Prazo (opcional)</label>
