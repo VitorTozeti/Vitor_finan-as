@@ -96,16 +96,21 @@ export function daysUntil(date: Date): number {
 }
 
 export function isSameMonth(dateIso: string, ref = new Date()): boolean {
-  const d = new Date(dateIso)
-  return d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth()
+  if (!dateIso) return false
+  const parts = dateIso.slice(0, 10).split('-')
+  if (parts.length < 2) return false
+  const y = Number(parts[0])
+  const m = Number(parts[1])
+  return y === ref.getFullYear() && m === (ref.getMonth() + 1)
 }
 
 export function monthKey(dateIso: string): string {
-  const d = new Date(dateIso)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  if (!dateIso) return ''
+  return dateIso.slice(0, 7)
 }
 
 export function monthLabel(key: string): string {
+  if (!key || !key.includes('-')) return ''
   const [y, m] = key.split('-').map(Number)
   const d = new Date(y, m - 1, 1)
   return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
