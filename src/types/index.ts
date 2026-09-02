@@ -119,6 +119,19 @@ export interface UnlockedAchievement {
   unlockedAt: string // ISO
 }
 
+export interface BankAccount {
+  id: string
+  name: string | null
+  type: string // 'BANK' | 'CREDIT'
+  subtype?: string | null
+  number?: string | null
+  balance: number | null
+  currency: string
+  creditLimit?: number | null
+  availableLimit?: number | null
+  updatedAt?: string
+}
+
 export interface AppState {
   settings: UserSettings
   transactions: Transaction[]
@@ -130,6 +143,7 @@ export interface AppState {
   benefits: Benefit[]
   cashbackPrograms: CashbackProgram[]
   unlockedAchievements: UnlockedAchievement[]
+  bankAccounts?: BankAccount[]
   demoDataCleared: boolean
   schemaVersion?: number
 }

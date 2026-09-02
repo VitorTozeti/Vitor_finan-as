@@ -158,6 +158,16 @@ function isUnlockedAchievement(v: unknown): v is UnlockedAchievement {
   return typeof v.id === 'string' && typeof v.unlockedAt === 'string'
 }
 
+function isBankAccount(v: unknown): v is import('../types').BankAccount {
+  if (!isObject(v)) return false
+  return (
+    typeof v.id === 'string' &&
+    typeof v.type === 'string' &&
+    typeof v.currency === 'string' &&
+    (v.balance === null || typeof v.balance === 'number')
+  )
+}
+
 /** Validates an unknown blob and migrates it into the current AppState shape.
  * Requires at minimum a `transactions` array to be considered a plausible
  * GreenFinance backup — everything else is sanitized/defaulted rather than
@@ -183,6 +193,7 @@ export function validateAndMigrate(raw: unknown): ValidateResult {
   const benefits = sanitizeArray(raw.benefits, isBenefit, 'benefícios', warnings)
   const cashbackPrograms = sanitizeArray(raw.cashbackPrograms, isCashbackProgram, 'cashback', warnings)
   const unlockedAchievements = sanitizeArray(raw.unlockedAchievements, isUnlockedAchievement, 'conquistas', warnings)
+  const bankAccounts = sanitizeArray(raw.bankAccounts, isBankAccount, 'contas bancárias', warnings)
   const demoDataCleared = typeof raw.demoDataCleared === 'boolean' ? raw.demoDataCleared : false
 
   const state: AppState = {
@@ -196,6 +207,7 @@ export function validateAndMigrate(raw: unknown): ValidateResult {
     benefits,
     cashbackPrograms,
     unlockedAchievements,
+    bankAccounts,
     demoDataCleared,
     schemaVersion: CURRENT_SCHEMA_VERSION
   }

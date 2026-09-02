@@ -53,10 +53,16 @@ export interface BankAccountSummary {
 }
 
 export interface BankInvestment {
+  code?: string | null
   name: string
   type: string
-  balance: number | null
-  value: number | null
+  subtype?: string | null
+  quantity?: number | null
+  price?: number | null
+  originalAmount?: number | null
+  avgPrice?: number | null
+  balance?: number | null
+  value?: number | null
   currency: string
 }
 
@@ -70,6 +76,7 @@ export interface BankSyncResult {
     accountsCount?: number
     transactionsCount?: number
     investmentsCount?: number
+    investmentsError?: string | null
   }
   error?: string
 }

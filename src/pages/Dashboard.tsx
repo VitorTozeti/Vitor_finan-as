@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header'
 import { Card, ProgressBar, BalanceCard } from '../components/Primitives'
 import { useStore } from '../store/useStore'
-import { isSameMonth, sumByType, formatCurrency, formatSignedPct, getNextPayDate, daysUntil, formatCurrencyShort } from '../utils/finance'
+import { sumByType, formatCurrency, formatSignedPct, getNextPayDate, daysUntil, formatCurrencyShort } from '../utils/finance'
 import { generateInsights, financialSummary } from '../utils/insights'
 import { summarizeBenefits } from '../utils/benefits'
 import TransactionForm from '../components/TransactionForm'
@@ -14,7 +14,6 @@ import {
   Sparkles,
   Gift,
   ChevronRight,
-  ChevronLeft,
   TrendingUp,
   TrendingDown,
   PieChart as PieIcon,
@@ -36,7 +35,6 @@ export default function Dashboard() {
   const { state } = useStore()
   const chart = useChartTheme()
   const [formOpen, setFormOpen] = useState(false)
-  const [selectedDate, setSelectedDate] = useState<Date>(() => new Date())
   const [quotes, setQuotes] = useState<Record<string, QuoteResult>>({})
   const benefits = summarizeBenefits(state.benefits)
 
@@ -55,20 +53,14 @@ export default function Dashboard() {
     }
   }, [state.portfolio])
 
-  const thisMonthTx = useMemo(
-    () => state.transactions.filter(t => isSameMonth(t.date, selectedDate)),
-    [state.transactions, selectedDate]
-  )
+  // Visão geral: considera TODOS os lançamentos, sem recorte por mês.
+  const allTx = state.transactions
 
-  const isCurrentMonth = useMemo(() => {
-    const now = new Date()
-    return selectedDate.getFullYear() === now.getFullYear() && selectedDate.getMonth() === now.getMonth()
-  }, [selectedDate])
-
-  const txIncome = sumByType(thisMonthTx, 'income')
-  // If transactions already have explicit income entries (e.g. from bank sync), use that; otherwise add default mainIncome
-  const income = txIncome > 0 ? txIncome : (isCurrentMonth ? state.settings.mainIncome : 0)
-  const expenses = sumByType(thisMonthTx, 'expense')
+  const txIncome = sumByType(allTx, 'income')
+  // Usa as entradas registradas (inclui as vindas do banco); se não houver
+  // nenhuma, cai para a renda principal configurada, para não mostrar zero.
+  const income = txIncome > 0 ? txIncome : state.settings.mainIncome
+  const expenses = sumByType(allTx, 'expense')
   const available = income - expenses
   const percentUsed = income > 0 ? Math.min(100, (expenses / income) * 100) : 0
 
@@ -84,14 +76,14 @@ export default function Dashboard() {
 
   const topCategories = useMemo(() => {
     const map = new Map<string, number>()
-    for (const t of thisMonthTx.filter(t => t.type === 'expense')) {
+    for (const t of allTx.filter(t => t.type === 'expense')) {
       map.set(t.categoryId, (map.get(t.categoryId) ?? 0) + t.amount)
     }
     return Array.from(map.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 4)
       .map(([id, amount]) => ({ cat: state.categories.find(c => c.id === id), amount }))
-  }, [thisMonthTx, state.categories])
+  }, [allTx, state.categories])
 
   // Portfolio calculations for Investment charts on Dashboard
   const portfolioInvested = useMemo(
@@ -124,59 +116,13 @@ export default function Dashboard() {
     [state.portfolio, quotes, chart]
   )
 
-  function prevMonth() {
-    setSelectedDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1))
-  }
-
-  function nextMonth() {
-    setSelectedDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1))
-  }
-
-  function resetToCurrentMonth() {
-    setSelectedDate(new Date())
-  }
-
-  const monthTitle = selectedDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-  const formattedMonthTitle = monthTitle.charAt(0).toUpperCase() + monthTitle.slice(1)
-
   return (
     <div className="pb-28">
       <Header title={`${greeting()} 👋`} subtitle="Aqui está sua visão financeira" />
       <div className="px-5 space-y-4">
-        {/* Seletor de Mês */}
-        <div className="flex items-center justify-between rounded-2xl bg-card border border-line/5 p-2 px-3">
-          <button
-            onClick={prevMonth}
-            aria-label="Mês anterior"
-            className="h-8 w-8 rounded-xl bg-bg flex items-center justify-center text-muted hover:text-txt active:scale-95 transition-transform"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <div className="text-center">
-            <p className="text-sm font-semibold capitalize">{formattedMonthTitle}</p>
-            {!isCurrentMonth && (
-              <button
-                onClick={resetToCurrentMonth}
-                className="text-[10px] text-green font-medium hover:underline"
-              >
-                Voltar ao mês atual
-              </button>
-            )}
-          </div>
-          <button
-            onClick={nextMonth}
-            aria-label="Próximo mês"
-            className="h-8 w-8 rounded-xl bg-bg flex items-center justify-center text-muted hover:text-txt active:scale-95 transition-transform"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-
         <BalanceCard
           balance={available}
-          spentLabel={`${formatCurrency(expenses)} de ${formatCurrency(income)} usados ${
-            isCurrentMonth ? 'este mês' : 'neste mês'
-          }`}
+          spentLabel={`${formatCurrency(expenses)} de ${formatCurrency(income)} usados no total`}
         />
 
         <div className="grid grid-cols-2 gap-3">
@@ -196,7 +142,7 @@ export default function Dashboard() {
 
         <Card>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm font-medium">Uso da renda mensal</p>
+            <p className="text-sm font-medium">Uso da renda</p>
             <p className="text-sm text-muted">{percentUsed.toFixed(0)}%</p>
           </div>
           <ProgressBar
@@ -206,9 +152,9 @@ export default function Dashboard() {
           />
           <p className="text-xs text-muted mt-2">
             {income === 0 && expenses === 0
-              ? 'Nenhum lançamento registrado neste mês.'
+              ? 'Nenhum lançamento registrado ainda.'
               : available >= 0
-              ? `Você pode gastar mais ${formatCurrency(available)} neste mês.`
+              ? `Você ainda tem ${formatCurrency(available)} disponíveis.`
               : `Você ultrapassou sua renda em ${formatCurrency(Math.abs(available))}.`}
           </p>
         </Card>
@@ -317,11 +263,9 @@ export default function Dashboard() {
           <Card>
             <p className="text-sm font-semibold">{summary.headline}</p>
             <p className="text-xs text-muted mt-1">{summary.detail}</p>
-            {isCurrentMonth && (
-              <p className="text-xs text-muted mt-0.5">
-                Próximo pagamento em {daysToPay} dia{daysToPay === 1 ? '' : 's'}
-              </p>
-            )}
+            <p className="text-xs text-muted mt-0.5">
+              Próximo pagamento em {daysToPay} dia{daysToPay === 1 ? '' : 's'}
+            </p>
           </Card>
         )}
 
@@ -346,7 +290,7 @@ export default function Dashboard() {
           <Card>
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-medium">Onde você mais gastou</p>
-              <span className="text-xs text-muted">{thisMonthTx.filter(t => t.type === 'expense').length} gasto(s)</span>
+              <span className="text-xs text-muted">{allTx.filter(t => t.type === 'expense').length} gasto(s)</span>
             </div>
             <div className="space-y-3">
               {topCategories.map(({ cat, amount }) => (

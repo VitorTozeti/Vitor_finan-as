@@ -116,12 +116,21 @@ function normalizeTx(t, account) {
     type = t.amount < 0 ? 'expense' : 'income'
   }
 
+  let paymentMethod = 'Débito'
+  if (isCredit) {
+    paymentMethod = 'Crédito'
+  } else if (t.paymentData?.paymentMethod === 'PIX' || /(^|\s)pix(\s|$)/i.test(baseDesc)) {
+    paymentMethod = 'Pix'
+  }
+
   return {
     date: String(t.date).slice(0, 10),
     amount: Math.abs(t.amount),
     type,
     description: tag ? `${baseDesc} · ${tag}` : baseDesc,
     categoryId: 'outros',
+    rawCategory: t.category || t.categorySlug || null,
+    paymentMethod,
     fitid: t.id
   }
 }
@@ -173,9 +182,12 @@ export default {
         }
 
         let investments = []
+        let investmentsError = null
         try {
           investments = (await pluggyGet(apiKey, `/investments?itemId=${encodeURIComponent(itemId)}`)).results || []
-        } catch {
+        } catch (err) {
+          console.error('Erro ao buscar investimentos:', err)
+          investmentsError = err?.message || String(err)
           investments = []
         }
 
@@ -194,19 +206,41 @@ export default {
         return json({
           transactions,
           accounts: accountSummary,
-          investments: investments.map(i => ({
-            name: i.name,
-            type: i.type,
-            balance: i.balance ?? null,
-            value: i.value ?? null,
-            currency: i.currencyCode || 'BRL'
-          })),
+          investments: investments.map(i => {
+            let code = i.code || i.symbol || i.ticker || ''
+            if (!code && i.name) {
+              const tickerMatch = i.name.match(/\b([A-Z]{4}(?:3|4|11|5|6|33|34))\b/i)
+              if (tickerMatch) code = tickerMatch[1].toUpperCase()
+            }
+            const quantity = Number(i.quantity) || (i.price && i.value ? Math.round(Number(i.value) / Number(i.price)) : 1)
+            let avgPrice = Number(i.price) || 0
+            if (!avgPrice && i.originalAmount && quantity) {
+              avgPrice = Number(i.originalAmount) / quantity
+            } else if (!avgPrice && i.value && quantity) {
+              avgPrice = Number(i.value) / quantity
+            }
+
+            return {
+              code: code || i.name,
+              name: i.name,
+              type: i.type,
+              subtype: i.subtype || null,
+              quantity: quantity,
+              price: Number(i.price) || (quantity ? Number(i.value) / quantity : 0),
+              originalAmount: Number(i.originalAmount) || (avgPrice * quantity),
+              avgPrice: Math.round(avgPrice * 100) / 100,
+              balance: Number(i.balance) ?? null,
+              value: Number(i.value) ?? null,
+              currency: i.currencyCode || 'BRL'
+            }
+          }),
           meta: {
             itemStatus: item.status,
             from,
             accountsCount: accounts.length,
             transactionsCount: transactions.length,
-            investmentsCount: investments.length
+            investmentsCount: investments.length,
+            investmentsError
           }
         }, 200, request)
       }

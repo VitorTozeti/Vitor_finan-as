@@ -30,6 +30,7 @@ function defaultState(): AppState {
     goals: [],
     portfolio: [],
     recurringRules: [],
+    bankAccounts: [],
     benefits: DEMO_BENEFITS(),
     cashbackPrograms: [],
     unlockedAchievements: [],
@@ -148,6 +149,8 @@ interface StoreValue {
   addRecurringRule: (rule: Omit<RecurringRule, 'id'>) => void
   updateRecurringRule: (id: string, patch: Partial<RecurringRule>) => void
   deleteRecurringRule: (id: string) => void
+  setBankAccounts: (accounts: import('../types').BankAccount[]) => void
+  addOrUpdatePortfolioAssets: (assets: Omit<PortfolioAsset, 'id'>[]) => void
   addBenefit: (benefit: Omit<Benefit, 'id'>) => void
   updateBenefit: (id: string, patch: Partial<Benefit>) => void
   deleteBenefit: (id: string) => void
@@ -319,6 +322,25 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, recurringRules: s.recurringRules.filter(r => r.id !== id) }))
   }, [])
 
+  const setBankAccounts = useCallback((accounts: import('../types').BankAccount[]) => {
+    setState(s => ({ ...s, bankAccounts: accounts }))
+  }, [])
+
+  const addOrUpdatePortfolioAssets = useCallback((assets: Omit<PortfolioAsset, 'id'>[]) => {
+    setState(s => {
+      const existing = [...s.portfolio]
+      for (const a of assets) {
+        const idx = existing.findIndex(p => p.ticker.toUpperCase() === a.ticker.toUpperCase())
+        if (idx >= 0) {
+          existing[idx] = { ...existing[idx], quantity: a.quantity, avgPrice: a.avgPrice }
+        } else {
+          existing.push({ ...a, id: crypto.randomUUID() })
+        }
+      }
+      return { ...s, portfolio: existing }
+    })
+  }, [])
+
   const addBenefit = useCallback((benefit: Omit<Benefit, 'id'>) => {
     setState(s => ({ ...s, benefits: [...s.benefits, { ...benefit, id: crypto.randomUUID() }] }))
   }, [])
@@ -411,6 +433,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       benefits: [],
       cashbackPrograms: [],
       unlockedAchievements: [],
+      bankAccounts: [],
       demoDataCleared: true,
       schemaVersion: CURRENT_SCHEMA_VERSION
     })
@@ -438,6 +461,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     addRecurringRule,
     updateRecurringRule,
     deleteRecurringRule,
+    setBankAccounts,
+    addOrUpdatePortfolioAssets,
     addBenefit,
     updateBenefit,
     deleteBenefit,

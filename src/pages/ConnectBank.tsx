@@ -389,6 +389,7 @@ function loadPluggyConnect(): Promise<any> {
 }
 
 function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedStatementTx[]) => void }) {
+  const { setBankAccounts, addOrUpdatePortfolioAssets } = useStore()
   const configured = isBankSyncConfigured()
   const [connecting, setConnecting] = useState(false)
 
@@ -412,9 +413,8 @@ function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedSta
             setConnecting(false)
             return
           }
-          // A sincronização do banco (contas + cartões + histórico) pode levar
-          // alguns segundos; o proxy espera o item ficar pronto antes de responder.
-          pushToast('Sincronizando contas e cartões… isso pode levar alguns segundos.')
+          // A sincronização do banco (contas + cartões + histórico + investimentos)
+          pushToast('Sincronizando contas, cartões e investimentos… isso pode levar alguns segundos.')
           const data = await fetchBankData(itemId)
           if (!data) {
             pushToast('Não foi possível buscar os dados. Confira o proxy.', 'error')
@@ -426,11 +426,64 @@ function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedSta
             setConnecting(false)
             return
           }
-          const { accountsCount = 0, investmentsCount = 0 } = data.meta
-          if (accountsCount > 0) {
-            const inv = investmentsCount > 0 ? ` e ${investmentsCount} investimento(s)` : ''
-            pushToast(`${accountsCount} conta(s)/cartão(ões)${inv} sincronizados`)
+
+          // 1. Salvar Contas e Saldos retornados pelo Pluggy
+          if (Array.isArray(data.accounts) && data.accounts.length > 0) {
+            setBankAccounts(
+              data.accounts.map(a => ({
+                id: a.id,
+                name: a.name,
+                type: a.type,
+                subtype: a.subtype,
+                number: a.number,
+                balance: a.balance,
+                currency: a.currency || 'BRL',
+                creditLimit: a.creditLimit,
+                availableLimit: a.availableLimit,
+                updatedAt: new Date().toISOString()
+              }))
+            )
           }
+
+          // 2. Salvar Ações e Investimentos com código, quantidade e preço médio na Carteira
+          if (Array.isArray(data.investments) && data.investments.length > 0) {
+            const assetsToAdd = data.investments
+              .map(inv => {
+                let ticker = (inv.code || inv.name || '').trim().toUpperCase()
+                const tickerMatch = ticker.match(/\b([A-Z]{4}(?:3|4|11|5|6|33|34))\b/i)
+                if (tickerMatch) ticker = tickerMatch[1].toUpperCase()
+                else ticker = ticker.replace(/[^A-Z0-9]/g, '').slice(0, 10)
+
+                const qty = Number(inv.quantity) || 1
+                let price = Number(inv.avgPrice) || Number(inv.price) || 0
+                if (!price && inv.originalAmount && qty) {
+                  price = Number(inv.originalAmount) / qty
+                } else if (!price && inv.value && qty) {
+                  price = Number(inv.value) / qty
+                }
+
+                return {
+                  ticker,
+                  quantity: qty,
+                  avgPrice: Math.round(price * 100) / 100
+                }
+              })
+              .filter(a => a.ticker && a.quantity > 0)
+
+            if (assetsToAdd.length > 0) {
+              addOrUpdatePortfolioAssets(assetsToAdd)
+            }
+          }
+
+          const { accountsCount = 0, investmentsCount = 0, transactionsCount = 0, investmentsError } = data.meta
+          if (investmentsError) {
+            pushToast(`Não foi possível trazer os investimentos: ${investmentsError}`, 'error')
+          }
+          const invMsg = investmentsCount > 0 ? ` e ${investmentsCount} ativo(s) de investimento` : ''
+          pushToast(
+            `${accountsCount} conta(s)${invMsg} e ${transactionsCount || data.transactions.length} lançamento(s) sincronizados!`
+          )
+
           onTransactions(data.transactions)
           setConnecting(false)
         },
