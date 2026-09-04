@@ -79,6 +79,16 @@ function buildWealthSeries(
   return { points, invested }
 }
 
+/** Valor de mercado de uma posição: cotação ao vivo × quantidade quando há
+ * cotação; senão o valor informado pelo banco (marketValue); senão o custo
+ * (quantidade × preço médio). Garante que renda fixa/fundos/Tesouro — que não
+ * têm ticker cotável na brapi — mostrem o valor real vindo do Open Finance. */
+function assetValue(p: PortfolioAsset, quote?: QuoteResult): number {
+  if (quote?.price) return p.quantity * quote.price
+  if (p.marketValue && p.marketValue > 0) return p.marketValue
+  return p.quantity * p.avgPrice
+}
+
 const PROJECTION_YEARS = [1, 5, 10]
 
 export default function Portfolio() {
@@ -168,24 +178,19 @@ export default function Portfolio() {
   }
 
   const invested = state.portfolio.reduce((acc, p) => acc + p.quantity * p.avgPrice, 0)
-  const current = state.portfolio.reduce((acc, p) => {
-    const q = quotes[p.ticker]
-    return acc + p.quantity * (q?.price ?? p.avgPrice)
-  }, 0)
+  const current = state.portfolio.reduce((acc, p) => acc + assetValue(p, quotes[p.ticker]), 0)
   const profit = current - invested
   const profitPct = invested > 0 ? (profit / invested) * 100 : 0
 
   const distribution = state.portfolio.map((p, i) => {
-    const q = quotes[p.ticker]
-    return { name: p.ticker, value: p.quantity * (q?.price ?? p.avgPrice), color: chart.colors[i % chart.colors.length] }
+    return { name: p.ticker, value: assetValue(p, quotes[p.ticker]), color: chart.colors[i % chart.colors.length] }
   })
 
   // Allocation grouped by broad asset class (Ações / FIIs / ETFs).
   const classAllocation = useMemo(() => {
     const map = new Map<string, number>()
     for (const p of state.portfolio) {
-      const q = quotes[p.ticker]
-      const value = p.quantity * (q?.price ?? p.avgPrice)
+      const value = assetValue(p, quotes[p.ticker])
       const cls = assetClass(p.ticker)
       map.set(cls, (map.get(cls) ?? 0) + value)
     }
@@ -443,7 +448,7 @@ export default function Portfolio() {
             <div className="space-y-2">
               {state.portfolio.map(p => {
                 const q = quotes[p.ticker]
-                const value = p.quantity * (q?.price ?? p.avgPrice)
+                const value = assetValue(p, q)
                 const cost = p.quantity * p.avgPrice
                 const pProfit = value - cost
                 const pPct = cost > 0 ? (pProfit / cost) * 100 : 0

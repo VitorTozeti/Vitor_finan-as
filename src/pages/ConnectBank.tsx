@@ -405,7 +405,7 @@ function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedSta
       const PluggyConnect = await loadPluggyConnect()
       const pluggy = new PluggyConnect({
         connectToken: token,
-        includeSandbox: true, // mostra bancos de teste; remova em produção
+        includeSandbox: false, // produção: sem bancos/investimentos de teste do sandbox
         onSuccess: async (itemData: any) => {
           const itemId = itemData?.item?.id
           if (!itemId) {
@@ -462,10 +462,16 @@ function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedSta
                   price = Number(inv.value) / qty
                 }
 
+                // Valor de mercado atual informado pelo banco (fallback para
+                // ativos sem cotação na brapi: renda fixa, fundos, Tesouro).
+                const marketValue =
+                  Number(inv.marketValue) || Number(inv.balance) || price * qty || undefined
+
                 return {
                   ticker,
                   quantity: qty,
-                  avgPrice: Math.round(price * 100) / 100
+                  avgPrice: Math.round(price * 100) / 100,
+                  marketValue: marketValue ? Math.round(marketValue * 100) / 100 : undefined
                 }
               })
               .filter(a => a.ticker && a.quantity > 0)

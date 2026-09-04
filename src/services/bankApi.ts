@@ -63,6 +63,7 @@ export interface BankInvestment {
   avgPrice?: number | null
   balance?: number | null
   value?: number | null
+  marketValue?: number | null
   currency: string
 }
 

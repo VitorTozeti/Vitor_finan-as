@@ -207,30 +207,44 @@ export default {
           transactions,
           accounts: accountSummary,
           investments: investments.map(i => {
-            let code = i.code || i.symbol || i.ticker || ''
+            // Campos do Pluggy (schema de Investment):
+            //   value          → preço/cota UNITÁRIO atual
+            //   quantity       → nº de cotas/unidades
+            //   balance/amount → valor TOTAL atual da posição (patrimônio)
+            //   amountOriginal → valor total investido (custo)
+            const num = v => (typeof v === 'number' && isFinite(v) ? v : Number(v)) || 0
+            const unitPrice = num(i.value)
+            const balance = num(i.balance)
+            const amount = num(i.amount)
+            const amountOriginal = num(i.amountOriginal) || num(i.originalAmount)
+
+            // Valor de mercado atual (total) da posição.
+            const marketValue = balance || amount || (unitPrice && num(i.quantity) ? unitPrice * num(i.quantity) : 0)
+            // Quantidade (deriva do total / preço unitário quando não vier).
+            const quantity = num(i.quantity) || (unitPrice ? marketValue / unitPrice : 0) || 1
+            // Preço médio de custo por unidade.
+            let avgPrice = amountOriginal && quantity ? amountOriginal / quantity : 0
+            if (!avgPrice) avgPrice = unitPrice || (marketValue && quantity ? marketValue / quantity : 0)
+
+            let code = i.code || i.symbol || i.ticker || i.isin || ''
             if (!code && i.name) {
               const tickerMatch = i.name.match(/\b([A-Z]{4}(?:3|4|11|5|6|33|34))\b/i)
               if (tickerMatch) code = tickerMatch[1].toUpperCase()
             }
-            const quantity = Number(i.quantity) || (i.price && i.value ? Math.round(Number(i.value) / Number(i.price)) : 1)
-            let avgPrice = Number(i.price) || 0
-            if (!avgPrice && i.originalAmount && quantity) {
-              avgPrice = Number(i.originalAmount) / quantity
-            } else if (!avgPrice && i.value && quantity) {
-              avgPrice = Number(i.value) / quantity
-            }
 
+            const round2 = n => Math.round(n * 100) / 100
             return {
               code: code || i.name,
               name: i.name,
               type: i.type,
               subtype: i.subtype || null,
-              quantity: quantity,
-              price: Number(i.price) || (quantity ? Number(i.value) / quantity : 0),
-              originalAmount: Number(i.originalAmount) || (avgPrice * quantity),
-              avgPrice: Math.round(avgPrice * 100) / 100,
-              balance: Number(i.balance) ?? null,
-              value: Number(i.value) ?? null,
+              quantity: Math.round(quantity * 1e6) / 1e6,
+              price: round2(unitPrice || (quantity ? marketValue / quantity : 0)),
+              originalAmount: round2(amountOriginal || avgPrice * quantity),
+              avgPrice: round2(avgPrice),
+              marketValue: round2(marketValue),
+              balance: balance || null,
+              value: unitPrice || null,
               currency: i.currencyCode || 'BRL'
             }
           }),

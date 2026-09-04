@@ -332,7 +332,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       for (const a of assets) {
         const idx = existing.findIndex(p => p.ticker.toUpperCase() === a.ticker.toUpperCase())
         if (idx >= 0) {
-          existing[idx] = { ...existing[idx], quantity: a.quantity, avgPrice: a.avgPrice }
+          existing[idx] = { ...existing[idx], quantity: a.quantity, avgPrice: a.avgPrice, marketValue: a.marketValue }
         } else {
           existing.push({ ...a, id: crypto.randomUUID() })
         }

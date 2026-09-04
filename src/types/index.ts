@@ -46,6 +46,10 @@ export interface PortfolioAsset {
   ticker: string
   quantity: number
   avgPrice: number
+  /** Valor de mercado atual informado pelo banco (Open Finance). Usado como
+   * fallback quando não há cotação ao vivo — ativos de renda fixa, fundos e
+   * Tesouro não têm ticker cotável na brapi. */
+  marketValue?: number
 }
 
 export interface RecurringRule {
