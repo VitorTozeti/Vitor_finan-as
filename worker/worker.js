@@ -20,8 +20,10 @@
 const PLUGGY_API = 'https://api.pluggy.ai'
 const BRAPI_API = 'https://brapi.dev/api'
 const DEFAULT_MONTHS = 24
-const ITEM_POLL_MAX_MS = 90000
-const ITEM_POLL_INTERVAL_MS = 2500
+// Workers grátis permitem ~50 chamadas externas por requisição: polling curto.
+const ITEM_POLL_MAX_MS = 40000
+const ITEM_POLL_INTERVAL_MS = 4000
+const MAX_POSITION_LOOKUPS = 10
 const SESSION_DAYS = 30
 const PBKDF2_ITERATIONS = 100000
 const MAX_STATE_BYTES = 1_900_000
@@ -306,20 +308,21 @@ async function waitItemReady(apiKey, itemId) {
 /** Garante que o item Pluggy pertence ao usuário logado. */
 async function assertItemOwner(env, apiKey, user, itemId) {
   const item = await pluggyGet(apiKey, `/items/${encodeURIComponent(itemId)}`)
-  if (item.clientUserId !== user.id) {
-    const owned = await env.DB.prepare('SELECT 1 AS ok FROM pluggy_items WHERE item_id = ? AND user_id = ?')
-      .bind(itemId, user.id)
-      .first()
-    if (!owned) throw new HttpError(404, 'Conexão bancária não encontrada')
-  }
-  return item
+  if (item.clientUserId === user.id) return item
+  const row = await env.DB.prepare('SELECT user_id FROM pluggy_items WHERE item_id = ?').bind(itemId).first()
+  if (row?.user_id === user.id) return item
+  // Item sem dono (criado antes da correção do clientUserId): fica com o
+  // primeiro usuário que o sincroniza. Item de outra pessoa → recusado.
+  if (!row && !item.clientUserId) return item
+  throw new HttpError(404, 'Conexão bancária não encontrada')
 }
 
 async function connectToken(request, env) {
   const user = await requireUser(request, env)
   const body = (request.headers.get('Content-Type') || '').includes('json') ? await readJson(request) : {}
   const apiKey = await pluggyApiKey(env)
-  const payload = { clientUserId: user.id }
+  // A Pluggy espera clientUserId dentro de "options" (fora dele é ignorado).
+  const payload = { options: { clientUserId: user.id } }
   if (body?.itemId) {
     await assertItemOwner(env, apiKey, user, String(body.itemId))
     payload.itemId = String(body.itemId) // modo "atualizar conexão"
@@ -457,7 +460,7 @@ async function positionFromTransactions(apiKey, investmentId) {
   return qty > 0 ? { quantity: qty, cost } : null
 }
 
-async function normalizeInvestment(apiKey, i, itemId) {
+async function normalizeInvestment(apiKey, i, itemId, budget = { left: MAX_POSITION_LOOKUPS }) {
   const ticker = extractTicker(i)
   const listed = isListed(i) && !!ticker
   const unitPrice = num(i.value) // Pluggy: valor UNITÁRIO da cota
@@ -466,7 +469,7 @@ async function normalizeInvestment(apiKey, i, itemId) {
   let quantity = num(i.quantity)
   let cost = num(i.amountOriginal) || num(i.originalAmount)
 
-  if (listed && (!quantity || !cost) && i.id) {
+  if (listed && (!quantity || !cost) && i.id && budget.left-- > 0) {
     const pos = await positionFromTransactions(apiKey, i.id)
     if (pos) {
       if (!quantity) quantity = pos.quantity
@@ -534,7 +537,8 @@ async function bankData(request, env, itemId) {
   try {
     const raw = await pluggyGetAllPages(apiKey, `/investments?itemId=${encodeURIComponent(itemId)}`)
     const active = raw.filter(i => i.status !== 'TOTAL_WITHDRAWAL')
-    investments = (await Promise.all(active.map(i => normalizeInvestment(apiKey, i, itemId)))).filter(
+    const budget = { left: MAX_POSITION_LOOKUPS }
+    investments = (await Promise.all(active.map(i => normalizeInvestment(apiKey, i, itemId, budget)))).filter(
       i => i.marketValue > 0 || i.quantityKnown
     )
   } catch (err) {
@@ -601,15 +605,69 @@ async function brapiFetchCached(env, ctx, path, params) {
   return data
 }
 
+const YAHOO_SPARK = 'https://query1.finance.yahoo.com/v7/finance/spark'
+
+/** Ticker B3 → símbolo do Yahoo (PETR4 → PETR4.SA; índices como ^BVSP ficam iguais). */
+const toYahoo = t => (t.startsWith('^') || t.includes('.') ? t : `${t}.SA`)
+
+/** Cotações gratuitas do Yahoo Finance no MESMO formato da brapi
+ * (regularMarketPrice, regularMarketChangePercent, historicalDataPrice…),
+ * para o app não precisar saber de onde veio. */
+async function yahooQuotes(tickers, withHistory) {
+  const out = []
+  for (let i = 0; i < tickers.length; i += 20) {
+    const chunk = tickers.slice(i, i + 20)
+    const qs = new URLSearchParams({
+      symbols: chunk.map(toYahoo).join(','),
+      range: withHistory ? '6mo' : '5d',
+      interval: '1d'
+    })
+    const res = await fetch(`${YAHOO_SPARK}?${qs}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (GreenFinance)', Accept: 'application/json' }
+    })
+    if (!res.ok) throw new Error(`yahoo ${res.status}`)
+    const data = await res.json()
+    const results = data?.spark?.result || []
+    for (const r of results) {
+      const resp = r.response?.[0]
+      const meta = resp?.meta
+      const price = meta?.regularMarketPrice
+      if (typeof price !== 'number') continue
+      const closes = resp.indicators?.quote?.[0]?.close || []
+      const times = resp.timestamp || []
+      const history = times
+        .map((ts, idx) => ({ date: ts, close: closes[idx] }))
+        .filter(h => typeof h.close === 'number')
+      // Variação do dia: preço atual vs. fechamento anterior.
+      const prev =
+        history.length >= 2 ? history[history.length - 2].close : meta.chartPreviousClose || meta.previousClose
+      const change = prev ? price - prev : 0
+      const symbol = chunk.find(t => toYahoo(t) === r.symbol) || r.symbol.replace(/\.SA$/, '')
+      out.push({
+        symbol,
+        shortName: meta.shortName || symbol,
+        longName: meta.longName || meta.shortName || symbol,
+        regularMarketPrice: price,
+        regularMarketChange: change,
+        regularMarketChangePercent: prev ? (change / prev) * 100 : 0,
+        regularMarketDayHigh: meta.regularMarketDayHigh,
+        regularMarketDayLow: meta.regularMarketDayLow,
+        regularMarketVolume: meta.regularMarketVolume,
+        currency: meta.currency || 'BRL',
+        historicalDataPrice: withHistory ? history : undefined,
+        source: 'yahoo'
+      })
+    }
+  }
+  return out
+}
+
 async function brapiProxy(request, env, ctx, subpath) {
   const params = Object.fromEntries(new URL(request.url).searchParams)
   if (subpath === 'available' || subpath === 'quote/list') {
     return json(request, await brapiFetchCached(env, ctx, subpath, params))
   }
   if (subpath.startsWith('quote/')) {
-    // O plano gratuito da brapi aceita 1 ticker por requisição: o servidor
-    // divide "PETR4,VALE3,..." e busca em paralelo (com cache de 60 s), e o
-    // app recebe tudo numa chamada só — sem perder ativo por rate limit.
     const tickers = [
       ...new Set(
         decodeURIComponent(subpath.slice('quote/'.length))
@@ -619,26 +677,41 @@ async function brapiProxy(request, env, ctx, subpath) {
       )
     ].slice(0, 80)
     if (!tickers.length) throw new HttpError(400, 'Nenhum ticker válido')
-    const results = []
-    const errors = []
-    const queue = [...tickers]
-    const runner = async () => {
-      while (queue.length) {
-        const t = queue.shift()
-        let data = await brapiFetchCached(env, ctx, `quote/${encodeURIComponent(t)}`, params)
-        // Plano sem token limita requisições simultâneas: espera e tenta de novo.
-        for (let attempt = 0; attempt < 3 && !data?.results?.[0]; attempt++) {
-          await sleep(400 * (attempt + 1))
-          data = await brapiFetchCached(env, ctx, `quote/${encodeURIComponent(t)}`, params)
-        }
-        if (data?.results?.[0]) results.push(data.results[0])
-        else errors.push({ ticker: t, error: data?.error || 'não encontrado' })
-      }
+    const withHistory = !!params.range
+
+    // Cache da resposta inteira (1 leitura + 1 escrita, poupa chamadas externas).
+    const cacheKey = new Request(
+      `https://quotes-cache.greenfinance.internal/${[...tickers].sort().join(',')}?h=${withHistory ? 1 : 0}`
+    )
+    const hit = await caches.default.match(cacheKey)
+    if (hit) return json(request, await hit.json())
+
+    // 1) Yahoo Finance (grátis, sem token, até 20 ativos por chamada).
+    const found = new Map()
+    try {
+      for (const q of await yahooQuotes(tickers, withHistory)) found.set(q.symbol, q)
+    } catch (err) {
+      console.error('yahoo', err)
     }
-    await Promise.all(Array.from({ length: Math.min(env.BRAPI_TOKEN ? 4 : 1, tickers.length) }, runner))
-    const order = new Map(tickers.map((t, i) => [t, i]))
-    results.sort((a, b) => (order.get(a.symbol) ?? 999) - (order.get(b.symbol) ?? 999))
-    return json(request, { results, errors })
+    // 2) O que faltou: brapi, um por vez (sem token ela só libera alguns ativos).
+    const errors = []
+    for (const t of tickers.filter(t => !found.has(t)).slice(0, 8)) {
+      const data = await brapiFetchCached(env, ctx, `quote/${encodeURIComponent(t)}`, params)
+      if (data?.results?.[0]) found.set(t, data.results[0])
+      else errors.push({ ticker: t, error: data?.error || 'não encontrado' })
+    }
+    const body = { results: tickers.filter(t => found.has(t)).map(t => found.get(t)), errors }
+    if (body.results.length) {
+      ctx.waitUntil(
+        caches.default.put(
+          cacheKey,
+          new Response(JSON.stringify(body), {
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': `max-age=${QUOTE_CACHE_SECONDS}` }
+          })
+        )
+      )
+    }
+    return json(request, body)
   }
   throw new HttpError(404, 'Rota brapi não permitida')
 }
