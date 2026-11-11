@@ -625,12 +625,17 @@ async function brapiProxy(request, env, ctx, subpath) {
     const runner = async () => {
       while (queue.length) {
         const t = queue.shift()
-        const data = await brapiFetchCached(env, ctx, `quote/${encodeURIComponent(t)}`, params)
+        let data = await brapiFetchCached(env, ctx, `quote/${encodeURIComponent(t)}`, params)
+        // Plano sem token limita requisições simultâneas: espera e tenta de novo.
+        for (let attempt = 0; attempt < 3 && !data?.results?.[0]; attempt++) {
+          await sleep(400 * (attempt + 1))
+          data = await brapiFetchCached(env, ctx, `quote/${encodeURIComponent(t)}`, params)
+        }
         if (data?.results?.[0]) results.push(data.results[0])
         else errors.push({ ticker: t, error: data?.error || 'não encontrado' })
       }
     }
-    await Promise.all(Array.from({ length: Math.min(6, tickers.length) }, runner))
+    await Promise.all(Array.from({ length: Math.min(env.BRAPI_TOKEN ? 4 : 1, tickers.length) }, runner))
     const order = new Map(tickers.map((t, i) => [t, i]))
     results.sort((a, b) => (order.get(a.symbol) ?? 999) - (order.get(b.symbol) ?? 999))
     return json(request, { results, errors })
