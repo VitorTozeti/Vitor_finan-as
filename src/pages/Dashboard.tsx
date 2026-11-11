@@ -6,7 +6,8 @@ import { sumByType, formatCurrency, formatSignedPct, getNextPayDate, daysUntil, 
 import { generateInsights, financialSummary } from '../utils/insights'
 import { summarizeBenefits } from '../utils/benefits'
 import TransactionForm from '../components/TransactionForm'
-import { getMultipleQuotes, QuoteResult } from '../services/marketApi'
+import { getQuotesMap, QuoteResult } from '../services/marketApi'
+import { assetValue, portfolioTotals, quotableTickers } from '../utils/portfolio'
 import {
   Plus,
   ArrowUpRight,
@@ -39,19 +40,17 @@ export default function Dashboard() {
   const benefits = summarizeBenefits(state.benefits)
 
   // Fetch quotes for portfolio assets to display live investment values and charts
+  const tickersKey = quotableTickers(state.portfolio).join(',')
   useEffect(() => {
-    if (state.portfolio.length === 0) return
+    if (!tickersKey) return
     let alive = true
-    getMultipleQuotes(state.portfolio.map(p => p.ticker)).then(results => {
-      if (!alive) return
-      const map: Record<string, QuoteResult> = {}
-      for (const r of results) map[r.ticker] = r
-      setQuotes(map)
+    getQuotesMap(tickersKey.split(',')).then(map => {
+      if (alive) setQuotes(map)
     })
     return () => {
       alive = false
     }
-  }, [state.portfolio])
+  }, [tickersKey])
 
   // Visão geral: considera TODOS os lançamentos, sem recorte por mês.
   const allTx = state.transactions
@@ -86,30 +85,18 @@ export default function Dashboard() {
   }, [allTx, state.categories])
 
   // Portfolio calculations for Investment charts on Dashboard
-  const portfolioInvested = useMemo(
-    () => state.portfolio.reduce((acc, p) => acc + p.quantity * p.avgPrice, 0),
-    [state.portfolio]
-  )
-
-  const portfolioCurrent = useMemo(
-    () =>
-      state.portfolio.reduce((acc, p) => {
-        const q = quotes[p.ticker]
-        return acc + p.quantity * (q?.price ?? p.avgPrice)
-      }, 0),
-    [state.portfolio, quotes]
-  )
-
-  const portfolioProfit = portfolioCurrent - portfolioInvested
-  const portfolioProfitPct = portfolioInvested > 0 ? (portfolioProfit / portfolioInvested) * 100 : 0
+  // Mesmo cálculo da tela Carteira (cotação ao vivo → valor do banco → custo).
+  const totals = useMemo(() => portfolioTotals(state.portfolio, quotes), [state.portfolio, quotes])
+  const portfolioCurrent = totals.current
+  const portfolioProfit = totals.profit
+  const portfolioProfitPct = totals.profitPct
 
   const portfolioDistribution = useMemo(
     () =>
       state.portfolio.map((p, i) => {
-        const q = quotes[p.ticker]
         return {
           name: p.ticker,
-          value: p.quantity * (q?.price ?? p.avgPrice),
+          value: assetValue(p, quotes[p.ticker.toUpperCase()]),
           color: chart.colors[i % chart.colors.length]
         }
       }),

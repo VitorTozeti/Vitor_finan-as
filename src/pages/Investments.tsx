@@ -6,7 +6,8 @@ import { AXIS_TICK, GRID_STROKE, SegmentedControl, useChartTheme } from '../comp
 import { useStore } from '../store/useStore'
 import { formatCurrency, formatSignedPct } from '../utils/finance'
 import { TrendingUp, TrendingDown, ChevronRight, RefreshCw, Search, X } from 'lucide-react'
-import { getQuote, getMultipleQuotes, getQuotesBatch, listQuotes, MarketListItem, QuoteResult } from '../services/marketApi'
+import { getQuote, getQuotesBatch, listQuotes, MarketListItem, QuoteResult } from '../services/marketApi'
+import { assetPrice, isQuotable, quotableTickers } from '../utils/portfolio'
 import { WATCHLIST } from '../data/investing'
 import TickerAutocomplete from '../components/TickerAutocomplete'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -462,7 +463,7 @@ function PortfolioVsIndex() {
   useEffect(() => {
     let alive = true
     setStatus('loading')
-    Promise.all([getMultipleQuotes(state.portfolio.map(p => p.ticker)), getQuote(BENCHMARK)])
+    Promise.all([getQuotesBatch(quotableTickers(state.portfolio), { history: true }), getQuote(BENCHMARK)])
       .then(([hs, b]) => {
         if (!alive) return
         setHoldings(hs)
@@ -478,14 +479,14 @@ function PortfolioVsIndex() {
   const series = useMemo(() => {
     if (!bench?.history?.length) return []
     const byTicker: Record<string, QuoteResult> = {}
-    for (const h of holdings) byTicker[h.ticker] = h
+    for (const h of holdings) byTicker[h.ticker.toUpperCase()] = h
     // Portfolio market value over the benchmark's timeline.
     const timeline = bench.history.map(x => x.date)
     const values = timeline.map(date => {
       let value = 0
       for (const p of state.portfolio) {
-        const hist = byTicker[p.ticker]?.history
-        let close = p.avgPrice
+        const hist = isQuotable(p) ? byTicker[p.ticker.toUpperCase()]?.history : undefined
+        let close = assetPrice(p, byTicker[p.ticker.toUpperCase()])
         if (hist && hist.length) {
           let picked = hist[0].close
           for (const point of hist) {

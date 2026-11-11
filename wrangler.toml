@@ -1,0 +1,29 @@
+# GreenFinance na Cloudflare: um único Worker serve o app (assets estáticos do
+# build do Vite em ./dist) e a API em /api/* (login, dados na nuvem D1,
+# Open Finance Pluggy e cotações brapi).
+#
+# O deploy roda no GitHub Actions (.github/workflows/deploy.yml) — não precisa
+# de Node local. O workflow cria o banco D1 se faltar, injeta o database_id
+# abaixo, aplica migrations/*.sql e publica.
+#
+# Segredos (NUNCA neste arquivo) — o workflow envia a partir dos secrets do GitHub:
+#   PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, BRAPI_TOKEN (opcional)
+
+name = "greenfinance"
+main = "worker/worker.js"
+compatibility_date = "2025-06-01"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "greenfinance"
+database_id = "__D1_DATABASE_ID__"
+migrations_dir = "migrations"
+
+[observability]
+enabled = true

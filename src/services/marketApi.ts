@@ -28,10 +28,16 @@ export interface QuoteResult {
   history?: { date: string; close: number }[]
 }
 
-const BASE_URL = 'https://brapi.dev/api'
-// Optional token for higher rate limits / extended history. Safe to leave
-// empty — the public tier works for basic quotes without one.
-const TOKEN = import.meta.env.VITE_BRAPI_TOKEN as string | undefined
+import { apiBase } from './api'
+
+// Em produção (app servido pelo Worker da Cloudflare) as cotações passam pelo
+// proxy /api/brapi: o token da brapi fica no servidor, há cache de 60 s e o
+// servidor busca vários tickers em paralelo. Sem o Worker (vite dev puro),
+// cai direto na brapi pública.
+const USE_PROXY = import.meta.env.PROD || !!import.meta.env.VITE_API_URL
+const BASE_URL = USE_PROXY ? `${apiBase}/brapi` : 'https://brapi.dev/api'
+// Token só é usado no modo direto (dev). Em produção ele é segredo do Worker.
+const TOKEN = USE_PROXY ? undefined : (import.meta.env.VITE_BRAPI_TOKEN as string | undefined)
 
 function withToken(url: string): string {
   if (!TOKEN) return url
@@ -163,12 +169,15 @@ export async function getMultipleQuotes(tickers: string[]): Promise<QuoteResult[
 // list). Lighter on the public rate limit than one call per ticker. History is
 // omitted here to keep the payload small — use getQuote for a single asset's
 // detail view. Falls back to per-ticker fetches if the batch endpoint fails.
-export async function getQuotesBatch(tickers: string[]): Promise<QuoteResult[]> {
+export async function getQuotesBatch(tickers: string[], opts: { history?: boolean } = {}): Promise<QuoteResult[]> {
+  tickers = [...new Set(tickers.map(t => t.trim().toUpperCase()).filter(Boolean))]
   if (tickers.length === 0) return []
+  if (!USE_PROXY && opts.history) return getMultipleQuotes(tickers)
   try {
-    const list = tickers.map(t => encodeURIComponent(t.toUpperCase())).join(',')
-    const res = await fetch(withToken(`${BASE_URL}/quote/${list}`))
-    if (!res.ok) return getMultipleQuotes(tickers)
+    const list = tickers.map(t => encodeURIComponent(t)).join(',')
+    const qs = opts.history ? '?range=6mo&interval=1d' : ''
+    const res = await fetch(withToken(`${BASE_URL}/quote/${list}${qs}`))
+    if (!res.ok) return USE_PROXY ? [] : getMultipleQuotes(tickers)
     const data = await res.json()
     const results = Array.isArray(data?.results) ? data.results : []
     const mapped: QuoteResult[] = results
@@ -182,12 +191,29 @@ export async function getQuotesBatch(tickers: string[]): Promise<QuoteResult[]> 
         dayHigh: r.regularMarketDayHigh as number | undefined,
         dayLow: r.regularMarketDayLow as number | undefined,
         volume: r.regularMarketVolume as number | undefined,
-        currency: r.currency as string | undefined
+        currency: r.currency as string | undefined,
+        history: Array.isArray(r.historicalDataPrice)
+          ? (r.historicalDataPrice as { date: number; close: number }[])
+              .filter(h => typeof h.close === 'number')
+              .map(h => ({ date: new Date(h.date * 1000).toISOString().slice(0, 10), close: h.close }))
+          : undefined
       }))
-    return mapped.length > 0 ? mapped : getMultipleQuotes(tickers)
-  } catch {
+    if (mapped.length > 0 || USE_PROXY) return mapped
     return getMultipleQuotes(tickers)
+  } catch {
+    return USE_PROXY ? [] : getMultipleQuotes(tickers)
   }
+}
+
+/** Cotações da carteira indexadas por ticker (maiúsculo), numa chamada só. */
+export async function getQuotesMap(
+  tickers: string[],
+  opts: { history?: boolean } = {}
+): Promise<Record<string, QuoteResult>> {
+  const list = await getQuotesBatch(tickers, opts)
+  const map: Record<string, QuoteResult> = {}
+  for (const q of list) if (q?.ticker) map[q.ticker.toUpperCase()] = q
+  return map
 }
 
 export function computePeriodPerformance(history: { date: string; close: number }[] | undefined, days: number): number | null {

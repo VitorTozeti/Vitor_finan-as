@@ -6,7 +6,10 @@ import { applyTheme, applyCustomPalette, buildCustomPalette, CUSTOM_THEME_ID } f
 
 // Apply the saved theme before first paint to avoid a flash of the default one.
 try {
-  const raw = localStorage.getItem('greenfinance:v1')
+  const cachedUser = JSON.parse(localStorage.getItem('greenfinance:auth-user') || 'null')
+  const raw =
+    (cachedUser?.id && localStorage.getItem(`greenfinance:v1:u:${cachedUser.id}`)) ||
+    localStorage.getItem('greenfinance:v1')
   const settings = raw ? JSON.parse(raw)?.settings : undefined
   applyTheme(settings?.theme)
   if (settings?.theme === CUSTOM_THEME_ID && settings?.customPalette) {

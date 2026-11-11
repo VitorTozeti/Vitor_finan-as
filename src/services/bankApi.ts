@@ -1,45 +1,33 @@
-// Open Finance / account-aggregator integration (Pluggy, Belvo, etc.).
+// Open Finance (Pluggy) via API do GreenFinance.
 //
-// IMPORTANT — read before wiring this up:
-// Automatic bank sync requires secret credentials (client_id / client_secret)
-// and, in Brazil, regulatory enrollment. Those secrets CANNOT live in this
-// frontend: this app is shipped as static files on GitHub Pages, so anything
-// here is public. The correct architecture is:
+//   [ app ] --(sessão do usuário)--> [ Worker /api ] --(segredo Pluggy)--> [ Pluggy ] --> banco
 //
-//   [ this app ] --> [ your backend / serverless proxy ] --> [ Pluggy/Belvo ]
-//                         (holds the secret, exchanges tokens)
-//
-// The proxy (e.g. a Cloudflare Worker, Vercel Function or small Node service)
-// authenticates with the aggregator, creates a Connect Token, and later returns
-// the fetched transactions already normalized. This file talks ONLY to your
-// proxy — never directly to the aggregator with a secret.
-//
-// To enable it, set VITE_BANK_PROXY_URL to your proxy's base URL. While it is
-// unset, isBankSyncConfigured() returns false and the UI shows setup guidance
-// instead of a broken button.
+// O segredo do Pluggy fica só no Worker. Cada conexão é criada com
+// clientUserId = id do usuário logado, e o Worker recusa itemIds de outra
+// pessoa — por isso todas as chamadas daqui exigem login.
 
 import { ParsedStatementTx } from '../utils/statementImport'
-
-const PROXY_URL = (import.meta.env.VITE_BANK_PROXY_URL as string | undefined)?.replace(/\/$/, '')
+import { PortfolioAsset } from '../types'
+import { api, ApiError } from './api'
 
 export function isBankSyncConfigured(): boolean {
-  return !!PROXY_URL
+  return true // a API sempre existe; se o Pluggy não estiver configurado, o Worker responde 503
 }
 
-/** Step 1: ask the proxy for a short-lived Connect Token to open the bank widget. */
-export async function createConnectToken(): Promise<string | null> {
-  if (!PROXY_URL) return null
+/** Token de curta duração para abrir o widget do Pluggy. Com itemId abre em
+ * modo "atualizar conexão" (reautenticar um banco já ligado). */
+export async function createConnectToken(itemId?: string): Promise<string | null> {
   try {
-    const res = await fetch(`${PROXY_URL}/connect-token`, { method: 'POST' })
-    if (!res.ok) return null
-    const data = await res.json()
-    return (data?.accessToken as string) ?? (data?.token as string) ?? null
+    const data = await api<{ accessToken: string }>('/connect-token', {
+      method: 'POST',
+      json: itemId ? { itemId } : {}
+    })
+    return data.accessToken ?? null
   } catch {
     return null
   }
 }
 
-/** Resumo de uma conta ou cartão devolvido pelo proxy. */
 export interface BankAccountSummary {
   id: string
   name: string | null
@@ -52,18 +40,24 @@ export interface BankAccountSummary {
   availableLimit: number | null
 }
 
+/** Posição de investimento já normalizada pelo Worker. */
 export interface BankInvestment {
-  code?: string | null
+  externalId: string | null
+  itemId: string
+  /** Ticker B3 quando é ativo de bolsa (PETR4, MXRF11...). */
+  ticker: string | null
+  code: string | null
   name: string
-  type: string
-  subtype?: string | null
-  quantity?: number | null
-  price?: number | null
-  originalAmount?: number | null
-  avgPrice?: number | null
-  balance?: number | null
-  value?: number | null
-  marketValue?: number | null
+  type: string | null
+  subtype: string | null
+  listed: boolean
+  quantity: number
+  quantityKnown: boolean
+  /** Preço unitário atual informado pelo banco. */
+  price: number
+  avgPrice: number
+  originalAmount: number
+  marketValue: number
   currency: string
 }
 
@@ -72,6 +66,8 @@ export interface BankSyncResult {
   accounts: BankAccountSummary[]
   investments: BankInvestment[]
   meta: {
+    itemId?: string
+    connector?: string | null
     itemStatus?: string
     from?: string
     accountsCount?: number
@@ -82,41 +78,56 @@ export interface BankSyncResult {
   error?: string
 }
 
-/** Step 2: after the user links an account, the proxy returns ALL normalized
- * transactions (contas + cartões, histórico completo e paginado), além do
- * resumo das contas e investimentos. A forma de `transactions` bate com o
- * parser de extrato, então as duas vias alimentam a mesma tela de revisão.
- *
- * @param months quanto de histórico buscar (padrão do proxy: 24 meses). */
+/** Busca tudo de uma conexão: transações (contas + cartões, paginadas),
+ * contas e TODAS as posições de investimento. */
 export async function fetchBankData(itemId: string, months?: number): Promise<BankSyncResult | null> {
-  if (!PROXY_URL) return null
   try {
     const qs = months ? `?months=${encodeURIComponent(months)}` : ''
-    const res = await fetch(`${PROXY_URL}/transactions/${encodeURIComponent(itemId)}${qs}`)
-    const data = await res.json().catch(() => null)
-    if (!res.ok) {
-      return {
-        transactions: [],
-        accounts: [],
-        investments: [],
-        meta: {},
-        error: (data?.error as string) || `Falha ao buscar dados (${res.status})`
-      }
-    }
+    const data = await api<BankSyncResult>(`/bank/${encodeURIComponent(itemId)}${qs}`)
     if (!Array.isArray(data?.transactions)) return null
     return {
-      transactions: data.transactions as ParsedStatementTx[],
-      accounts: (data.accounts as BankAccountSummary[]) ?? [],
-      investments: (data.investments as BankInvestment[]) ?? [],
+      transactions: data.transactions,
+      accounts: data.accounts ?? [],
+      investments: data.investments ?? [],
       meta: data.meta ?? {}
     }
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiError && err.status !== 0) {
+      return { transactions: [], accounts: [], investments: [], meta: {}, error: err.message }
+    }
     return null
   }
 }
 
-/** Compatibilidade: devolve só as transações (usado pela tela de revisão). */
-export async function fetchBankTransactions(itemId: string): Promise<ParsedStatementTx[] | null> {
-  const data = await fetchBankData(itemId)
-  return data ? data.transactions : null
+export interface PluggyItemSummary {
+  itemId: string
+  connector: string | null
+  lastSyncAt: string | null
+  createdAt: string
+}
+
+export async function listBankItems(): Promise<PluggyItemSummary[]> {
+  try {
+    return (await api<{ items: PluggyItemSummary[] }>('/items')).items
+  } catch {
+    return []
+  }
+}
+
+/** Converte as posições do banco em ativos da carteira. */
+export function investmentsToPortfolio(investments: BankInvestment[]): Omit<PortfolioAsset, 'id'>[] {
+  return investments
+    .filter(inv => inv.quantity > 0 && (inv.marketValue > 0 || inv.quantityKnown))
+    .map(inv => ({
+      ticker: inv.ticker || (inv.code || inv.name || 'ATIVO').replace(/\s+/g, ' ').trim().slice(0, 32),
+      name: inv.name,
+      listed: inv.listed,
+      assetType: inv.type || undefined,
+      quantity: inv.quantity,
+      avgPrice: Math.round(inv.avgPrice * 10000) / 10000,
+      bankPrice: inv.price > 0 ? inv.price : undefined,
+      marketValue: inv.marketValue > 0 ? inv.marketValue : undefined,
+      itemId: inv.itemId,
+      externalId: inv.externalId || undefined
+    }))
 }

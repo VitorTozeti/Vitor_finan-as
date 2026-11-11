@@ -50,6 +50,18 @@ export interface PortfolioAsset {
    * fallback quando não há cotação ao vivo — ativos de renda fixa, fundos e
    * Tesouro não têm ticker cotável na brapi. */
   marketValue?: number
+  /** Nome legível (ex.: "PETROBRAS PN", "CDB Banco X 2027"). */
+  name?: string
+  /** true = negociado em bolsa (preço ao vivo pela brapi); false = renda fixa/fundo. */
+  listed?: boolean
+  /** Tipo do ativo no Open Finance (EQUITY, FIXED_INCOME, MUTUAL_FUND, ETF...). */
+  assetType?: string
+  /** Preço unitário informado pelo banco na última sincronização. */
+  bankPrice?: number
+  /** Origem: conexão Pluggy (itemId) e id do investimento nela. Sem isso = manual. */
+  itemId?: string
+  externalId?: string
+  updatedAt?: string
 }
 
 export interface RecurringRule {

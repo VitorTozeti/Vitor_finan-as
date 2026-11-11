@@ -15,9 +15,7 @@ import {
 import { DEFAULT_CATEGORIES, DEFAULT_SETTINGS, buildDemoTransactions, DEMO_BENEFITS } from '../data/defaults'
 import { CURRENT_SCHEMA_VERSION, validateAndMigrate } from '../utils/stateSchema'
 import { pushToast } from '../components/Primitives'
-
-const STORAGE_KEY = 'greenfinance:v1'
-const CORRUPTED_BACKUP_KEY = 'greenfinance:v1:corrupted-backup'
+import { useCloudSync, storageKeyFor, SyncStatus } from './cloudSync'
 const PERSIST_DEBOUNCE_MS = 400
 const FALLBACK_CATEGORY_ID = 'outros'
 
@@ -43,13 +41,14 @@ function defaultState(): AppState {
  * blob is missing, unparsable, or structurally invalid, the raw string is
  * preserved under a separate key (so nothing is silently lost) and the
  * caller is told via `recovered: true` so it can warn the user. */
-function loadState(): { state: AppState; recovered: boolean } {
+function loadState(STORAGE_KEY: string): { state: AppState; recovered: boolean; hadCache: boolean } {
+  const CORRUPTED_BACKUP_KEY = `${STORAGE_KEY}:corrupted-backup`
   const rawStr = localStorage.getItem(STORAGE_KEY)
-  if (!rawStr) return { state: defaultState(), recovered: false }
+  if (!rawStr) return { state: defaultState(), recovered: false, hadCache: false }
   try {
     const parsed = JSON.parse(rawStr)
     const result = validateAndMigrate(parsed)
-    if (result.ok) return { state: result.state, recovered: false }
+    if (result.ok) return { state: result.state, recovered: false, hadCache: true }
   } catch {
     // JSON.parse failed — fall through to the backup+recover path below
   }
@@ -58,7 +57,7 @@ function loadState(): { state: AppState; recovered: boolean } {
   } catch {
     // storage full/unavailable — nothing more we can do
   }
-  return { state: defaultState(), recovered: true }
+  return { state: defaultState(), recovered: true, hadCache: false }
 }
 
 function monthKeyOf(year: number, month1to12: number): string {
@@ -162,13 +161,18 @@ interface StoreValue {
   clearDemoData: () => void
   importData: (data: unknown) => void
   resetAll: () => void
+  syncStatus: SyncStatus
 }
 
 const StoreContext = createContext<StoreValue | null>(null)
 
-export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [initial] = useState(loadState)
+export function StoreProvider({ children, userId }: { children: React.ReactNode; userId: string }) {
+  const STORAGE_KEY = storageKeyFor(userId)
+  const CORRUPTED_BACKUP_KEY = `${STORAGE_KEY}:corrupted-backup`
+  const [initial] = useState(() => loadState(STORAGE_KEY))
   const [state, setState] = useState<AppState>(initial.state)
+  const replaceState = useCallback((s: AppState) => setState(generateDueRecurring(s)), [])
+  const syncStatus = useCloudSync(userId, state, replaceState, initial.hadCache)
   const stateRef = useRef(state)
   const persistTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -188,7 +192,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     stateRef.current = state
     if (persistTimeout.current) clearTimeout(persistTimeout.current)
     persistTimeout.current = setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+      } catch {
+        // cota do navegador cheia — a nuvem continua com a cópia
+      }
     }, PERSIST_DEBOUNCE_MS)
     return () => {
       if (persistTimeout.current) clearTimeout(persistTimeout.current)
@@ -326,18 +334,38 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, bankAccounts: accounts }))
   }, [])
 
+  /** Aplica as posições vindas do Open Finance. Casa por externalId (ou
+   * ticker+conexão), atualiza cotas/preço/valor e remove posições daquela
+   * conexão que o banco não devolveu mais (vendidas/resgatadas). Ativos
+   * manuais nunca são tocados. */
   const addOrUpdatePortfolioAssets = useCallback((assets: Omit<PortfolioAsset, 'id'>[]) => {
     setState(s => {
-      const existing = [...s.portfolio]
+      const now = new Date().toISOString()
+      const syncedItems = new Set(assets.map(a => a.itemId).filter(Boolean) as string[])
+      const sameAsset = (p: PortfolioAsset, a: Omit<PortfolioAsset, 'id'>) =>
+        (a.externalId && p.externalId === a.externalId) ||
+        (p.ticker.toUpperCase() === a.ticker.toUpperCase() && (p.itemId || null) === (a.itemId || null))
+      const touched = new Set<string>()
+      const next = [...s.portfolio]
       for (const a of assets) {
-        const idx = existing.findIndex(p => p.ticker.toUpperCase() === a.ticker.toUpperCase())
+        let idx = next.findIndex(p => sameAsset(p, a))
+        // Importações antigas (antes do vínculo por conexão) tinham marketValue e nenhum itemId.
+        if (idx < 0) {
+          idx = next.findIndex(
+            p => !p.itemId && p.marketValue !== undefined && p.ticker.toUpperCase() === a.ticker.toUpperCase()
+          )
+        }
         if (idx >= 0) {
-          existing[idx] = { ...existing[idx], quantity: a.quantity, avgPrice: a.avgPrice, marketValue: a.marketValue }
+          next[idx] = { ...next[idx], ...a, id: next[idx].id, updatedAt: now }
+          touched.add(next[idx].id)
         } else {
-          existing.push({ ...a, id: crypto.randomUUID() })
+          const id = crypto.randomUUID()
+          next.push({ ...a, id, updatedAt: now })
+          touched.add(id)
         }
       }
-      return { ...s, portfolio: existing }
+      const portfolio = next.filter(p => !p.itemId || !syncedItems.has(p.itemId) || touched.has(p.id))
+      return { ...s, portfolio }
     })
   }, [])
 
@@ -437,7 +465,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       demoDataCleared: true,
       schemaVersion: CURRENT_SCHEMA_VERSION
     })
-  }, [])
+  }, [STORAGE_KEY, CORRUPTED_BACKUP_KEY])
 
   const value: StoreValue = {
     state,
@@ -473,7 +501,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     markAchievementsUnlocked,
     clearDemoData,
     importData,
-    resetAll
+    resetAll,
+    syncStatus
   }
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

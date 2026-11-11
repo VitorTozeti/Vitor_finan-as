@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Header from '../components/Header'
 import { Card, pushToast } from '../components/Primitives'
 import { useStore } from '../store/useStore'
@@ -6,7 +6,13 @@ import { formatCurrency } from '../utils/finance'
 import { parseStatement, parseStatementLines, ParsedStatementTx, DateFormatHint } from '../utils/statementImport'
 import { extractPdfLines } from '../utils/pdfExtract'
 import { decodeFileText, TextEncodingChoice } from '../utils/decodeFile'
-import { isBankSyncConfigured, createConnectToken, fetchBankData } from '../services/bankApi'
+import {
+  createConnectToken,
+  fetchBankData,
+  investmentsToPortfolio,
+  listBankItems,
+  PluggyItemSummary
+} from '../services/bankApi'
 import {
   Upload,
   FileText,
@@ -16,7 +22,8 @@ import {
   ShieldCheck,
   TrendingUp,
   TrendingDown,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react'
 
 type Tab = 'import' | 'sync'
@@ -390,108 +397,91 @@ function loadPluggyConnect(): Promise<any> {
 
 function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedStatementTx[]) => void }) {
   const { setBankAccounts, addOrUpdatePortfolioAssets } = useStore()
-  const configured = isBankSyncConfigured()
   const [connecting, setConnecting] = useState(false)
+  const [syncingItem, setSyncingItem] = useState<string | null>(null)
+  const [items, setItems] = useState<PluggyItemSummary[]>([])
 
-  async function handleConnect() {
+  const reloadItems = useCallback(() => {
+    listBankItems().then(setItems)
+  }, [])
+
+  useEffect(() => {
+    reloadItems()
+  }, [reloadItems])
+
+  /** Puxa contas, lançamentos e TODAS as posições de investimento de uma conexão. */
+  async function syncItem(itemId: string, opts: { reviewTransactions: boolean }) {
+    setSyncingItem(itemId)
+    pushToast('Sincronizando contas, cartões e investimentos… isso pode levar alguns segundos.')
+    try {
+      const data = await fetchBankData(itemId)
+      if (!data) {
+        pushToast('Sem conexão com o servidor. Tente de novo.', 'error')
+        return
+      }
+      if (data.error) {
+        pushToast(data.error, 'error')
+        return
+      }
+
+      if (data.accounts.length > 0) {
+        setBankAccounts(
+          data.accounts.map(a => ({
+            id: a.id,
+            name: a.name,
+            type: a.type,
+            subtype: a.subtype,
+            number: a.number,
+            balance: a.balance,
+            currency: a.currency || 'BRL',
+            creditLimit: a.creditLimit,
+            availableLimit: a.availableLimit,
+            updatedAt: new Date().toISOString()
+          }))
+        )
+      }
+
+      // Carteira: ticker, nº de cotas, preço médio, preço e valor atuais do banco.
+      // Posições daquela conexão que sumiram (vendidas/resgatadas) saem da carteira.
+      const assets = investmentsToPortfolio(data.investments)
+      if (assets.length > 0 || data.meta.investmentsCount === 0) {
+        if (!data.meta.investmentsError) addOrUpdatePortfolioAssets(assets)
+      }
+
+      const { accountsCount = 0, investmentsCount = 0, transactionsCount = 0, investmentsError } = data.meta
+      if (investmentsError) pushToast(`Não foi possível trazer os investimentos: ${investmentsError}`, 'error')
+      const invMsg = investmentsCount > 0 ? `, ${investmentsCount} investimento(s)` : ''
+      pushToast(`${accountsCount} conta(s)${invMsg} e ${transactionsCount} lançamento(s) sincronizados!`)
+
+      if (opts.reviewTransactions || data.transactions.length > 0) onTransactions(data.transactions)
+      reloadItems()
+    } finally {
+      setSyncingItem(null)
+    }
+  }
+
+  async function openWidget(updateItemId?: string) {
     setConnecting(true)
     try {
-      const token = await createConnectToken()
+      const token = await createConnectToken(updateItemId)
       if (!token) {
-        pushToast('Não foi possível iniciar a conexão. Confira o proxy.', 'error')
+        pushToast('Não foi possível iniciar a conexão. Tente de novo em instantes.', 'error')
         setConnecting(false)
         return
       }
       const PluggyConnect = await loadPluggyConnect()
       const pluggy = new PluggyConnect({
         connectToken: token,
-        includeSandbox: false, // produção: sem bancos/investimentos de teste do sandbox
+        ...(updateItemId ? { updateItem: updateItemId } : {}),
+        includeSandbox: false, // produção: sem bancos de teste do sandbox
         onSuccess: async (itemData: any) => {
+          setConnecting(false)
           const itemId = itemData?.item?.id
           if (!itemId) {
             pushToast('Conexão sem item válido', 'error')
-            setConnecting(false)
             return
           }
-          // A sincronização do banco (contas + cartões + histórico + investimentos)
-          pushToast('Sincronizando contas, cartões e investimentos… isso pode levar alguns segundos.')
-          const data = await fetchBankData(itemId)
-          if (!data) {
-            pushToast('Não foi possível buscar os dados. Confira o proxy.', 'error')
-            setConnecting(false)
-            return
-          }
-          if (data.error) {
-            pushToast(data.error, 'error')
-            setConnecting(false)
-            return
-          }
-
-          // 1. Salvar Contas e Saldos retornados pelo Pluggy
-          if (Array.isArray(data.accounts) && data.accounts.length > 0) {
-            setBankAccounts(
-              data.accounts.map(a => ({
-                id: a.id,
-                name: a.name,
-                type: a.type,
-                subtype: a.subtype,
-                number: a.number,
-                balance: a.balance,
-                currency: a.currency || 'BRL',
-                creditLimit: a.creditLimit,
-                availableLimit: a.availableLimit,
-                updatedAt: new Date().toISOString()
-              }))
-            )
-          }
-
-          // 2. Salvar Ações e Investimentos com código, quantidade e preço médio na Carteira
-          if (Array.isArray(data.investments) && data.investments.length > 0) {
-            const assetsToAdd = data.investments
-              .map(inv => {
-                let ticker = (inv.code || inv.name || '').trim().toUpperCase()
-                const tickerMatch = ticker.match(/\b([A-Z]{4}(?:3|4|11|5|6|33|34))\b/i)
-                if (tickerMatch) ticker = tickerMatch[1].toUpperCase()
-                else ticker = ticker.replace(/[^A-Z0-9]/g, '').slice(0, 10)
-
-                const qty = Number(inv.quantity) || 1
-                let price = Number(inv.avgPrice) || Number(inv.price) || 0
-                if (!price && inv.originalAmount && qty) {
-                  price = Number(inv.originalAmount) / qty
-                } else if (!price && inv.value && qty) {
-                  price = Number(inv.value) / qty
-                }
-
-                // Valor de mercado atual informado pelo banco (fallback para
-                // ativos sem cotação na brapi: renda fixa, fundos, Tesouro).
-                const marketValue =
-                  Number(inv.marketValue) || Number(inv.balance) || price * qty || undefined
-
-                return {
-                  ticker,
-                  quantity: qty,
-                  avgPrice: Math.round(price * 100) / 100,
-                  marketValue: marketValue ? Math.round(marketValue * 100) / 100 : undefined
-                }
-              })
-              .filter(a => a.ticker && a.quantity > 0)
-
-            if (assetsToAdd.length > 0) {
-              addOrUpdatePortfolioAssets(assetsToAdd)
-            }
-          }
-
-          const { accountsCount = 0, investmentsCount = 0, transactionsCount = 0, investmentsError } = data.meta
-          if (investmentsError) {
-            pushToast(`Não foi possível trazer os investimentos: ${investmentsError}`, 'error')
-          }
-          const invMsg = investmentsCount > 0 ? ` e ${investmentsCount} ativo(s) de investimento` : ''
-          pushToast(
-            `${accountsCount} conta(s)${invMsg} e ${transactionsCount || data.transactions.length} lançamento(s) sincronizados!`
-          )
-
-          onTransactions(data.transactions)
-          setConnecting(false)
+          await syncItem(itemId, { reviewTransactions: true })
         },
         onError: () => {
           pushToast('Não foi possível conectar a conta', 'error')
@@ -506,6 +496,8 @@ function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedSta
     }
   }
 
+  const busy = connecting || !!syncingItem
+
   return (
     <>
       <Card>
@@ -516,50 +508,68 @@ function OpenFinancePanel({ onTransactions }: { onTransactions: (rows: ParsedSta
           <div>
             <p className="text-sm font-medium">Sincronização automática (Open Finance)</p>
             <p className="text-xs text-muted mt-0.5">
-              Conecta sua conta via um agregador (Pluggy) e traz os lançamentos sozinho.
+              Conecte seu banco ou corretora pelo Pluggy: lançamentos, saldos e a carteira de investimentos (cotas, preço
+              médio e valor atual) chegam sozinhos. A conexão fica vinculada só à sua conta.
             </p>
           </div>
         </div>
       </Card>
 
-      {configured ? (
+      {items.length > 0 && (
         <Card>
-          <p className="text-sm font-medium mb-1 text-green">Backend configurado ✓</p>
-          <p className="text-xs text-muted mb-3">
-            Toque abaixo para escolher seu banco (ex.: Itaú), autorizar pelo Open Finance e trazer os lançamentos para a
-            tela de revisão.
-          </p>
-          <button
-            onClick={handleConnect}
-            disabled={connecting}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-green py-3 text-sm font-semibold text-bg disabled:opacity-60"
-          >
-            <Link2 size={16} /> {connecting ? 'Abrindo conexão…' : 'Conectar minha conta'}
-          </button>
-        </Card>
-      ) : (
-        <Card className="border-warn/30">
-          <p className="text-sm font-medium mb-2 text-warn">Precisa de um backend para funcionar</p>
-          <p className="text-xs text-muted leading-relaxed mb-3">
-            Este app é 100% estático (GitHub Pages), então não pode guardar as chaves secretas do banco/agregador com
-            segurança. A sincronização automática exige um pequeno servidor intermediário que guarda o segredo e conversa
-            com o agregador.
-          </p>
-          <div className="rounded-xl bg-bg p-3 text-xs text-muted space-y-2">
-            <p className="font-medium text-txt">Como habilitar</p>
-            <p>1. Crie uma conta em um agregador de Open Finance (ex.: Pluggy ou Belvo).</p>
-            <p>2. Suba um proxy (Cloudflare Worker / Vercel Function) que guarde o segredo e exponha:</p>
-            <p className="font-mono text-[11px] text-txt pl-3">POST /connect-token<br />GET /transactions/:itemId</p>
-            <p>3. Defina a variável de ambiente no build:</p>
-            <p className="font-mono text-[11px] text-txt pl-3">VITE_BANK_PROXY_URL=https://seu-proxy…</p>
-            <p>O código cliente já está pronto em <span className="font-mono text-[11px] text-txt">src/services/bankApi.ts</span>.</p>
+          <p className="text-sm font-medium mb-3">Suas conexões</p>
+          <div className="space-y-2">
+            {items.map(it => (
+              <div key={it.itemId} className="flex items-center justify-between gap-3 rounded-xl bg-bg px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{it.connector || 'Instituição'}</p>
+                  <p className="text-[11px] text-muted">
+                    {it.lastSyncAt
+                      ? `Sincronizado em ${new Date(it.lastSyncAt).toLocaleString('pt-BR', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}`
+                      : 'Ainda não sincronizado'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => openWidget(it.itemId)}
+                    disabled={busy}
+                    className="rounded-lg px-2.5 py-1.5 text-[11px] font-medium text-muted hover:text-txt disabled:opacity-50"
+                    title="Refazer o login no banco (se a sincronização falhar)"
+                  >
+                    Reconectar
+                  </button>
+                  <button
+                    onClick={() => syncItem(it.itemId, { reviewTransactions: false })}
+                    disabled={busy}
+                    className="flex items-center gap-1 rounded-lg bg-green/15 px-2.5 py-1.5 text-[11px] font-semibold text-green disabled:opacity-50"
+                  >
+                    <RefreshCw size={12} className={syncingItem === it.itemId ? 'animate-spin' : ''} />
+                    {syncingItem === it.itemId ? 'Sincronizando' : 'Sincronizar'}
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-          <p className="text-[11px] text-muted mt-3">
-            Enquanto isso, a aba <span className="text-txt font-medium">Importar extrato</span> já traz seus lançamentos
-            sem precisar de servidor.
-          </p>
         </Card>
       )}
+
+      <Card>
+        <p className="text-xs text-muted mb-3">
+          Escolha seu banco ou corretora, autorize pelo Open Finance e revise os lançamentos antes de salvar.
+        </p>
+        <button
+          onClick={() => openWidget()}
+          disabled={busy}
+          className="w-full flex items-center justify-center gap-2 rounded-xl bg-green py-3 text-sm font-semibold text-bg disabled:opacity-60"
+        >
+          <Link2 size={16} /> {connecting ? 'Abrindo conexão…' : items.length ? 'Conectar outra conta' : 'Conectar minha conta'}
+        </button>
+      </Card>
     </>
   )
 }

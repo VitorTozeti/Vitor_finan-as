@@ -6,7 +6,17 @@ import { exportAsJson, exportTransactionsAsCsv, parseImportedJson } from '../uti
 import { parseAmountInput } from '../utils/finance'
 import CategoryManager from '../components/CategoryManager'
 import RecurringRulesManager from '../components/RecurringRulesManager'
-import { Download, Upload, Trash2, Check, Palette, Brush } from 'lucide-react'
+import { Download, Upload, Trash2, Check, Palette, Brush, Cloud, LogOut } from 'lucide-react'
+import { useAuth } from '../store/useAuth'
+import { SyncStatus } from '../store/cloudSync'
+
+const SYNC_LABEL: Record<SyncStatus, string> = {
+  loading: 'Conectando à nuvem…',
+  synced: 'Dados salvos na nuvem',
+  saving: 'Salvando na nuvem…',
+  offline: 'Sem internet — salvo neste aparelho, envia ao voltar',
+  error: 'Não foi possível salvar na nuvem agora'
+}
 import { THEMES, DEFAULT_THEME, CUSTOM_THEME_ID } from '../data/themes'
 
 /** Small uppercase group label used to visually section the settings list. */
@@ -17,7 +27,8 @@ function SectionLabel({ children }: { children: ReactNode }) {
 const DEFAULT_CUSTOM = { bg: '#141414', primary: '#22D68A', accent: '#FFB454' }
 
 export default function Settings() {
-  const { state, updateSettings, clearDemoData, resetAll, importData } = useStore()
+  const { state, updateSettings, clearDemoData, resetAll, importData, syncStatus } = useStore()
+  const { user, logout } = useAuth()
   const [income, setIncome] = useState(String(state.settings.mainIncome))
   const [payDay, setPayDay] = useState(String(state.settings.payDay))
   const [confirmClearDemo, setConfirmClearDemo] = useState(false)
@@ -71,6 +82,26 @@ export default function Settings() {
     <div className="pb-28">
       <Header title="Configurações" subtitle="Personalize seu GreenFinance" />
       <div className="px-5 space-y-6">
+        <div className="space-y-4">
+          <SectionLabel>Conta</SectionLabel>
+          <Card className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{user?.name || user?.email}</p>
+              {user?.name && <p className="text-xs text-muted truncate">{user.email}</p>}
+              <p className="flex items-center gap-1.5 text-[11px] text-muted mt-1">
+                <Cloud size={12} className={syncStatus === 'synced' ? 'text-green' : 'text-muted'} />
+                {SYNC_LABEL[syncStatus]}
+              </p>
+            </div>
+            <button
+              onClick={() => logout()}
+              className="flex items-center gap-1.5 rounded-xl border border-line/10 px-3 py-2 text-xs font-medium text-muted hover:text-danger shrink-0"
+            >
+              <LogOut size={14} /> Sair
+            </button>
+          </Card>
+        </div>
+
         <div className="space-y-4">
           <SectionLabel>Aparência</SectionLabel>
           <Card>

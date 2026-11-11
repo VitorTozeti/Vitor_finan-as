@@ -20,6 +20,8 @@ import Settings from './pages/Settings'
 import More from './pages/More'
 import Benefits from './pages/Benefits'
 import Onboarding from './pages/Onboarding'
+import Login from './pages/Login'
+import { AuthProvider, useAuth } from './store/useAuth'
 
 function AppShell() {
   const { state } = useStore()
@@ -64,14 +66,40 @@ function AppShell() {
   )
 }
 
+/** Sem login → tela de entrada. Com login → o app, com os dados DAQUELA conta
+ * (o `key` remonta o store ao trocar de usuário, sem misturar dados). */
+function AuthGate() {
+  const { status, user } = useAuth()
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center">
+        <div className="h-10 w-10 rounded-2xl bg-green animate-pulse" aria-label="Carregando" />
+      </div>
+    )
+  }
+  if (status === 'anon' || !user) {
+    return (
+      <>
+        <Login />
+        <ToastHost />
+      </>
+    )
+  }
+  return (
+    <StoreProvider key={user.id} userId={user.id}>
+      <HashRouter>
+        <AppShell />
+      </HashRouter>
+    </StoreProvider>
+  )
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
-      <StoreProvider>
-        <HashRouter>
-          <AppShell />
-        </HashRouter>
-      </StoreProvider>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
     </ErrorBoundary>
   )
 }

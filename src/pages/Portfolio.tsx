@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Header from '../components/Header'
 import { Card, EmptyState, Modal, pushToast, ConfirmDialog } from '../components/Primitives'
 import {
@@ -12,10 +12,11 @@ import {
 import TickerAutocomplete from '../components/TickerAutocomplete'
 import { useStore } from '../store/useStore'
 import { formatCurrency, formatCurrencyShort, formatSignedPct, parseAmountInput } from '../utils/finance'
-import { getMultipleQuotes, getQuote, QuoteResult } from '../services/marketApi'
+import { getQuote, getQuotesMap, QuoteResult } from '../services/marketApi'
+import { assetCost, assetPrice, assetTypeLabel, assetValue, isQuotable, priceSource, quotableTickers } from '../utils/portfolio'
 import { findTicker, TickerEntry } from '../utils/tickers'
 import { PortfolioAsset } from '../types'
-import { Plus, TrendingUp, TrendingDown, Pencil, RefreshCw } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, Pencil, RefreshCw, Landmark, Radio } from 'lucide-react'
 import {
   PieChart,
   Pie,
@@ -32,7 +33,9 @@ import {
 } from 'recharts'
 
 /** Broad asset class from a ticker's catalog kind (used for allocation view). */
-function assetClass(ticker: string): 'Ações' | 'FIIs' | 'ETFs' {
+function assetClass(p: PortfolioAsset): string {
+  if (!isQuotable(p)) return assetTypeLabel(p)
+  const ticker = p.ticker.toUpperCase()
   const entry = findTicker(ticker)
   if (entry?.kind === 'FII') return 'FIIs'
   if (entry?.kind === 'ETF') return 'ETFs'
@@ -45,15 +48,12 @@ function assetClass(ticker: string): 'Ações' | 'FIIs' | 'ETFs' {
  * quantity × (most recent close at-or-before that date). Cost basis is a flat
  * reference line so the user can see market value pulling away from (or below)
  * what they put in. */
-function buildWealthSeries(
-  portfolio: { ticker: string; quantity: number; avgPrice: number }[],
-  quotes: Record<string, QuoteResult>
-) {
-  const invested = portfolio.reduce((acc, p) => acc + p.quantity * p.avgPrice, 0)
+function buildWealthSeries(portfolio: PortfolioAsset[], quotes: Record<string, QuoteResult>) {
+  const invested = portfolio.reduce((acc, p) => acc + assetCost(p), 0)
   // Reference timeline = the asset with the most history points.
   let timeline: string[] = []
   for (const p of portfolio) {
-    const h = quotes[p.ticker]?.history
+    const h = quotes[p.ticker.toUpperCase()]?.history
     if (h && h.length > timeline.length) timeline = h.map(x => x.date)
   }
   if (timeline.length === 0) return { points: [], invested }
@@ -61,9 +61,14 @@ function buildWealthSeries(
   const points = timeline.map(date => {
     let value = 0
     for (const p of portfolio) {
-      const h = quotes[p.ticker]?.history
+      const h = isQuotable(p) ? quotes[p.ticker.toUpperCase()]?.history : undefined
+      if (!h || h.length === 0) {
+        // Sem histórico (renda fixa/fundo ou sem cotação): valor atual constante.
+        value += assetValue(p, quotes[p.ticker.toUpperCase()])
+        continue
+      }
       let close = p.avgPrice
-      if (h && h.length > 0) {
+      {
         // last close at-or-before this date (fallback to first point)
         let picked = h[0].close
         for (const point of h) {
@@ -79,17 +84,9 @@ function buildWealthSeries(
   return { points, invested }
 }
 
-/** Valor de mercado de uma posição: cotação ao vivo × quantidade quando há
- * cotação; senão o valor informado pelo banco (marketValue); senão o custo
- * (quantidade × preço médio). Garante que renda fixa/fundos/Tesouro — que não
- * têm ticker cotável na brapi — mostrem o valor real vindo do Open Finance. */
-function assetValue(p: PortfolioAsset, quote?: QuoteResult): number {
-  if (quote?.price) return p.quantity * quote.price
-  if (p.marketValue && p.marketValue > 0) return p.marketValue
-  return p.quantity * p.avgPrice
-}
-
 const PROJECTION_YEARS = [1, 5, 10]
+
+const formatQty = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 6 })
 
 export default function Portfolio() {
   const { state, addPortfolioAsset, updatePortfolioAsset, deletePortfolioAsset } = useStore()
@@ -104,14 +101,35 @@ export default function Portfolio() {
   const [avgPrice, setAvgPrice] = useState('')
   const [fetchingPrice, setFetchingPrice] = useState(false)
 
-  useEffect(() => {
-    if (state.portfolio.length === 0) return
-    getMultipleQuotes(state.portfolio.map(p => p.ticker)).then(results => {
-      const map: Record<string, QuoteResult> = {}
-      for (const r of results) map[r.ticker] = r
+  const [loadingQuotes, setLoadingQuotes] = useState(false)
+  const [quotesAt, setQuotesAt] = useState<Date | null>(null)
+  const tickersKey = quotableTickers(state.portfolio).join(',')
+
+  const refreshQuotes = useCallback(async () => {
+    const tickers = tickersKey ? tickersKey.split(',') : []
+    if (tickers.length === 0) {
+      setQuotes({})
+      return
+    }
+    setLoadingQuotes(true)
+    try {
+      const map = await getQuotesMap(tickers, { history: true })
       setQuotes(map)
-    })
-  }, [state.portfolio])
+      setQuotesAt(new Date())
+      const missing = tickers.filter(t => !map[t])
+      if (missing.length > 0) {
+        pushToast(`Sem cotação agora para ${missing.join(', ')} — usando o último valor conhecido.`, 'error')
+      }
+    } finally {
+      setLoadingQuotes(false)
+    }
+  }, [tickersKey])
+
+  useEffect(() => {
+    refreshQuotes()
+  }, [refreshQuotes])
+
+  const quoteOf = (p: PortfolioAsset) => quotes[p.ticker.toUpperCase()]
 
   function resetForm() {
     setTicker('')
@@ -177,32 +195,32 @@ export default function Portfolio() {
     setFormOpen(false)
   }
 
-  const invested = state.portfolio.reduce((acc, p) => acc + p.quantity * p.avgPrice, 0)
-  const current = state.portfolio.reduce((acc, p) => acc + assetValue(p, quotes[p.ticker]), 0)
+  const invested = state.portfolio.reduce((acc, p) => acc + assetCost(p), 0)
+  const current = state.portfolio.reduce((acc, p) => acc + assetValue(p, quoteOf(p)), 0)
   const profit = current - invested
   const profitPct = invested > 0 ? (profit / invested) * 100 : 0
 
   const distribution = state.portfolio.map((p, i) => {
-    return { name: p.ticker, value: assetValue(p, quotes[p.ticker]), color: chart.colors[i % chart.colors.length] }
+    return { name: p.ticker, value: assetValue(p, quoteOf(p)), color: chart.colors[i % chart.colors.length] }
   })
 
   // Allocation grouped by broad asset class (Ações / FIIs / ETFs).
   const classAllocation = useMemo(() => {
     const map = new Map<string, number>()
     for (const p of state.portfolio) {
-      const value = assetValue(p, quotes[p.ticker])
-      const cls = assetClass(p.ticker)
+      const value = assetValue(p, quoteOf(p))
+      const cls = assetClass(p)
       map.set(cls, (map.get(cls) ?? 0) + value)
     }
     const classColor: Record<string, string> = { 'Ações': chart.green, FIIs: chart.accent, ETFs: chart.colors[2] }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value, color: classColor[name] ?? chart.colors[3] }))
+    return Array.from(map.entries()).map(([name, value], i) => ({ name, value, color: classColor[name] ?? chart.colors[(3 + i) % chart.colors.length] }))
   }, [state.portfolio, quotes, chart])
 
   // Per-asset unrealized return %, sorted, for the profit bar chart.
   const profitByAsset = useMemo(() => {
     return state.portfolio
       .map(p => {
-        const price = quotes[p.ticker]?.price ?? p.avgPrice
+        const price = assetPrice(p, quoteOf(p))
         const pct = p.avgPrice > 0 ? ((price - p.avgPrice) / p.avgPrice) * 100 : 0
         return { ticker: p.ticker, pct: Math.round(pct * 100) / 100 }
       })
@@ -215,8 +233,7 @@ export default function Portfolio() {
   const performers = useMemo(() => {
     const withPct = state.portfolio
       .map(p => {
-        const q = quotes[p.ticker]
-        const price = q?.price ?? p.avgPrice
+        const price = assetPrice(p, quoteOf(p))
         const pct = p.avgPrice > 0 ? ((price - p.avgPrice) / p.avgPrice) * 100 : 0
         return { ticker: p.ticker, pct }
       })
@@ -446,23 +463,67 @@ export default function Portfolio() {
             )}
 
             <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <p className="text-sm font-medium">Seus ativos ({state.portfolio.length})</p>
+                <button
+                  onClick={refreshQuotes}
+                  disabled={loadingQuotes}
+                  className="flex items-center gap-1.5 text-xs text-muted hover:text-txt disabled:opacity-60"
+                >
+                  <RefreshCw size={13} className={loadingQuotes ? 'animate-spin' : ''} />
+                  {loadingQuotes
+                    ? 'Atualizando…'
+                    : quotesAt
+                      ? `Cotações às ${quotesAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Atualizar cotações'}
+                </button>
+              </div>
               {state.portfolio.map(p => {
-                const q = quotes[p.ticker]
+                const q = quoteOf(p)
                 const value = assetValue(p, q)
-                const cost = p.quantity * p.avgPrice
+                const cost = assetCost(p)
                 const pProfit = value - cost
                 const pPct = cost > 0 ? (pProfit / cost) * 100 : 0
-                const name = findTicker(p.ticker)?.name
+                const price = assetPrice(p, q)
+                const source = priceSource(p, q)
+                const name = p.name || findTicker(p.ticker)?.name
                 return (
                   <Card key={p.id} className="!p-4 flex items-center justify-between">
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm">{p.ticker}</p>
-                      {name && <p className="text-[11px] text-muted truncate">{name}</p>}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-semibold text-sm truncate">{p.ticker}</p>
+                        <span
+                          title={
+                            source === 'live'
+                              ? 'Preço ao vivo da bolsa (B3)'
+                              : source === 'bank'
+                                ? 'Valor informado pelo banco na última sincronização'
+                                : 'Sem cotação: usando o preço médio'
+                          }
+                          className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide ${
+                            source === 'live'
+                              ? 'bg-green/15 text-green'
+                              : source === 'bank'
+                                ? 'bg-accent/15 text-accent'
+                                : 'bg-line/10 text-muted'
+                          }`}
+                        >
+                          {source === 'live' ? <Radio size={9} /> : source === 'bank' ? <Landmark size={9} /> : null}
+                          {source === 'live' ? 'ao vivo' : source === 'bank' ? 'banco' : 'custo'}
+                        </span>
+                        {q && typeof q.changePercent === 'number' && (
+                          <span className={`text-[10px] font-medium ${q.changePercent >= 0 ? 'text-green' : 'text-danger'}`}>
+                            {formatSignedPct(q.changePercent)} hoje
+                          </span>
+                        )}
+                      </div>
+                      {name && name !== p.ticker && <p className="text-[11px] text-muted truncate">{name}</p>}
                       <p className="text-xs text-muted">
-                        {p.quantity} un · preço médio {formatCurrency(p.avgPrice)}
+                        {formatQty(p.quantity)} {isQuotable(p) ? 'cotas' : 'un'} · atual {formatCurrency(price)} · médio{' '}
+                        {formatCurrency(p.avgPrice)}
                       </p>
                     </div>
-                    <div className="text-right ml-2">
+                    <div className="text-right ml-2 shrink-0">
                       <p className="font-display text-sm font-medium">{formatCurrency(value)}</p>
                       <p className={`text-xs ${pProfit >= 0 ? 'text-green' : 'text-danger'}`}>
                         {pProfit >= 0 ? '+' : ''}
@@ -473,7 +534,11 @@ export default function Portfolio() {
                       <button onClick={() => openEdit(p)} className="text-muted hover:text-txt" aria-label="Editar">
                         <Pencil size={14} />
                       </button>
-                      <button onClick={() => setPendingDelete(p.id)} className="text-muted hover:text-danger text-xs" aria-label="Remover">
+                      <button
+                        onClick={() => setPendingDelete(p.id)}
+                        className="text-muted hover:text-danger text-xs"
+                        aria-label="Remover"
+                      >
                         ✕
                       </button>
                     </div>

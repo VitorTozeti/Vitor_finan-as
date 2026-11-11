@@ -4,71 +4,68 @@ Instruções e contexto para o Claude Code trabalhar neste projeto.
 
 ## O que é
 
-App de finanças pessoais **React 18 + TypeScript + Vite**, PWA, **single-user**, sem
-backend próprio. Hospedado **estático no GitHub Pages**. Dados persistidos em
-`localStorage` (nada em servidor). Roteamento com `HashRouter` (evita 404 no Pages).
+App de finanças pessoais **React 18 + TypeScript + Vite**, PWA, **multiusuário**, hospedado
+na **Cloudflare**: um único Worker (`worker/worker.js`, config em `wrangler.toml` na raiz)
+serve o app (assets do `dist/`) e a API em `/api/*`. Cada pessoa cria conta (e-mail + senha,
+PBKDF2) e os dados ficam no **D1** (`user_state`, um JSON do `AppState` por usuário, com
+versão para detectar conflito entre aparelhos). O `localStorage` continua como cache
+offline por usuário (`greenfinance:v1:u:<userId>`). Roteamento com `HashRouter`.
 
 - Repositório: `VitorTozeti/Vitor_finan-as`
-- Site: `https://vitortozeti.github.io/Vitor_finan-as/`
-- `base` do Vite: `/Vitor_finan-as/` (precisa bater com o nome do repo; ajustar também em
-  `index.html` e no manifest do PWA se o repo for renomeado).
+- Site: `https://greenfinance.<subdominio-da-conta>.workers.dev` (Worker `greenfinance`)
+- `base` do Vite: `/` (variável `VITE_BASE` só para publicar em subpasta).
+- GitHub Pages (`vitortozeti.github.io/Vitor_finan-as`) e o Worker antigo
+  `blue-bonus-47ec` são legado — não recebem mais deploy.
 
 ## Build e deploy
 
-- **Não há Node instalado na máquina do usuário.** Todo build roda na nuvem via
-  **GitHub Actions** (`.github/workflows/deploy.yml`): push na `main` → build → GitHub Pages.
-- Variáveis de build vêm de **secrets do repositório** (Settings → Secrets → Actions):
-  - `VITE_BRAPI_TOKEN` (opcional — cotações brapi.dev)
-  - `VITE_BANK_PROXY_URL` (URL do Cloudflare Worker do Open Finance)
-- Para publicar mudança de código: **commit + push na `main`** (dispara o deploy).
-  Não tente `npm run build` local — não há Node aqui.
+- **Não há Node instalado na máquina do usuário.** Todo build roda no **GitHub Actions**
+  (`.github/workflows/deploy.yml`): qualquer push → `tsc` + `vite build` + `wrangler deploy
+  --dry-run`; push na **`main`** → cria o D1 `greenfinance` se faltar, injeta o id no
+  `wrangler.toml` (placeholder `__D1_DATABASE_ID__`), aplica `migrations/*.sql` e publica.
+- Secrets do GitHub (Settings → Secrets → Actions): `CLOUDFLARE_API_TOKEN` (Workers + D1
+  edit), `CLOUDFLARE_ACCOUNT_ID`, `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`, `BRAPI_TOKEN`
+  (opcional). O workflow envia os três últimos como secrets do Worker (`wrangler secret bulk`).
 
 ## Estrutura
 
 ```
 src/
-  components/  UI reutilizável        pages/    rotas/telas
-  services/    APIs externas          store/    estado global (Context + localStorage)
-  utils/       cálculos, import/export, parsers de extrato
-  types/  data/
-worker/        Cloudflare Worker (proxy do Open Finance)
+  components/  UI reutilizável        pages/    rotas/telas (Login.tsx = entrada)
+  services/    api.ts (cliente /api), bankApi.ts (Pluggy), marketApi.ts (cotações)
+  store/       useStore (estado + cache local), cloudSync (D1), useAuth (sessão)
+  utils/       portfolio.ts = valuation ÚNICA da carteira (Carteira/Dashboard/Investimentos)
+worker/        worker.js — API + assets           migrations/  schema D1
 ```
 
-Dados de mercado isolados em `src/services/marketApi.ts` (provedor: brapi.dev, sem chave
-para uso básico). Para trocar de provedor, mexa só nesse arquivo.
+## API (`worker/worker.js`)
 
-## Conectar banco — duas formas
+`/api/auth/register|login|logout`, `/api/me`, `GET|PUT /api/state` (409 em conflito de
+versão), `POST /api/connect-token` (Pluggy, `clientUserId` = id do usuário), `GET /api/items`,
+`GET /api/bank/:itemId` (confere dono do item), `GET /api/brapi/quote/A,B,C` (divide em 1
+ticker por chamada, em paralelo, cache 60 s, token no servidor), `/api/brapi/available`,
+`/api/brapi/quote/list`.
 
-1. **Importar extrato** (PDF/OFX/CSV) — funciona 100% offline, lido no navegador.
-   Parsers em `src/utils/statementImport.ts` e `src/utils/pdfExtract.ts`.
-2. **Open Finance (Pluggy)** — sincronização automática. Arquitetura:
-   `App (estático) → Cloudflare Worker (guarda o segredo) → Pluggy → banco`.
+## Carteira de investimentos
 
-### Setup do Open Finance (JÁ CONFIGURADO — via painéis web, sem rodar nada local)
+- Worker busca **todas as páginas** de `/investments` (antes só a 1ª, 20 itens) e ignora
+  `TOTAL_WITHDRAWAL`. Pluggy: `value` = preço unitário, `quantity` = cotas,
+  `balance`/`amount` = total atual, `amountOriginal` = custo. Sem `quantity`/custo em ativo de
+  bolsa → reconstrói por `/investments/:id/transactions` (compras − vendas, custo médio).
+- Ticker extraído de code/name (`.SA` e `F` fracionário removidos). Renda fixa/fundos
+  entram com `listed: false` e valor do banco.
+- Carteira casa posições por `externalId` (ou ticker + `itemId`) e remove as que o banco
+  não devolveu mais; ativos manuais (sem `itemId`) nunca são tocados.
+- Preço exibido: ao vivo (brapi) → banco → preço médio (`utils/portfolio.ts`).
 
-- **Cloudflare Worker** em `worker/worker.js` (colado manualmente no dashboard da
-  Cloudflare — editar lá exige **re-colar/editar no editor do dashboard**, o arquivo do
-  repo é só a fonte de verdade).
-  - Worker atual: `https://blue-bonus-47ec.vitortozeti.workers.dev`
-  - Secrets no Worker (Cloudflare → Settings → Variables, tipo *Secret*):
-    `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET` (credenciais do dashboard.pluggy.ai).
-  - `ALLOWED_ORIGIN` fixo em `https://vitortozeti.github.io`.
-  - Endpoints: `POST /connect-token` → `{accessToken}`; `GET /transactions/:itemId` →
-    `{transactions}` normalizadas.
-- **Secret do GitHub** `VITE_BANK_PROXY_URL` = URL do Worker acima (sem barra no final).
-- Cliente em `src/services/bankApi.ts`; UI + carga do SDK em `src/pages/ConnectBank.tsx`.
+## Open Finance (Pluggy)
+
 - SDK do widget: `https://cdn.pluggy.ai/pluggy-connect/latest/pluggy-connect.js`
-  (versões fixas antigas como `v2.9.1` saíram do ar e retornam 404 — usar `latest`).
-- `includeSandbox: true` em `ConnectBank.tsx` mostra bancos de teste; trocar para `false`
-  depois de validar com o sandbox, para produção.
-
-### Diagnóstico rápido do Open Finance
-
-- "Confira o proxy" → app não obteve token: `VITE_BANK_PROXY_URL` errado/desatualizado, ou
-  Worker fora do ar. Testar `curl -X POST <worker>/connect-token` (deve vir `{accessToken}`).
-- "Falha ao abrir o Pluggy" → token OK, mas o SDK do widget não carregou (URL do SDK 404).
-- 404 `{"error":"not found"}` ao abrir a URL do Worker no navegador é **normal** (rota raiz
-  não existe; rotas válidas são as de cima).
+  (usar `latest`; versões fixas antigas dão 404). `includeSandbox: false` em produção.
+- Tela Conectar → "Suas conexões" lista os itens do usuário com **Sincronizar** (puxa de novo
+  sem refazer login) e **Reconectar** (widget em modo update).
+- Diagnóstico: `GET /api/health` mostra `{db, pluggy}` configurados. 503 "Open Finance não
+  configurado" = faltam os secrets do Pluggy no Worker.
 
 ## Regras deste projeto
 
